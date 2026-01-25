@@ -375,7 +375,7 @@ Texture Polygon::trace_texture(const ObjectSet &object_set, const Point3 &viewpo
 
 		// 递归获取目标polygon的纹理
 		Texture target_texture = target_polygon->trace_texture(object_set, reflected_origin);
-		target_texture.save_texture(std::to_string(diguicishu) + "_" + std::to_string(i++) + ".ppm");
+		// target_texture.save_texture(std::to_string(diguicishu) + "_" + std::to_string(i++) + ".ppm");
 
 		// 计算目标polygon顶点在其自身纹理中的UV坐标（最小包围盒原则）
 		Vec3 target_normal = target_polygon->plane_.normal.normalized();

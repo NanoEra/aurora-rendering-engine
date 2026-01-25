@@ -1,0 +1,79 @@
+// 确认代码
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> ls
+compiled  CRTP.cpp  ecs.cpp  stdvariant.cpp  type_erase.cpp  virtual_function.cpp
+
+// 编译代码
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 CRTP.cpp -o compiled/CRTP_O0 -O0
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 CRTP.cpp -o compiled/CRTP_O2 -O2
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 ecs.cpp -o compiled/ecs_O0 -O0
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 ecs.cpp -o compiled/ecs_O2 -O2
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 stdvariant.cpp -o compiled/stdvariant_O0 -O0
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 stdvariant.cpp -o compiled/stdvariant_O2 -O2
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 type_erase.cpp -o compiled/type_erase_O0 -O0
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 type_erase.cpp -o compiled/type_erase_O2 -O2
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 virtual_function.cpp -o compiled/virtual_function_O0 -O0
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> g++ -std=c++20 virtual_function.cpp -o compiled/virtual_function_O2 -O2
+
+// 确认编译结果正确
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism]
+└-> cd compiled/
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ls
+CRTP_O0  ecs_O0  stdvariant_O0  type_erase_O0  virtual_function_O0
+CRTP_O2  ecs_O2  stdvariant_O2  type_erase_O2  virtual_function_O2
+
+// 运行并记录时间
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./CRTP_O0
+CRTP Static Polymorphism Execution Time: 6629 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./CRTP_O2
+CRTP Static Polymorphism Execution Time: 88 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./ecs_O0
+ECS Execution Time: 23662 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./ecs_O2
+ECS Execution Time: 2847 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./stdvariant_O0
+std::variant Execution Time: 35229 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./stdvariant_O2
+std::variant Execution Time: 373 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./type_erase_O0
+Type Erasure (std::function) Execution Time: 23404 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./type_erase_O2
+Type Erasure (std::function) Execution Time: 3712 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./virtual_function_O0
+Virtual Function Execution Time: 20982 µs
+┌[Ternary_Operator@/toDataDrive/ARE/experiments/polymorphism/compiled]
+└-> ./virtual_function_O2
+Virtual Function Execution Time: 6044 µs
+
+// 综合测试成绩:
+// CRTP: -O0->6629 µs, -O2->88 µs
+// std::variant: -O0->35229 µs, -O2->373 µs
+// Type Erasure: -O0->23404 µs, -O2->3712 µs
+// ECS: -O0->23662 µs, -O2->2847 µs
+// Virtual Function: -O0->20982 µs, -O2->6044 µs
+
+// -O0: CRTP > Virtual Function > Type Erasure ~= ECS > std::variant
+// -O2: CRTP > std::variant > ECS > Type Erasure > Virtual Function
+
+
+// 综合考虑，引擎采用CRTP多态实现方法。

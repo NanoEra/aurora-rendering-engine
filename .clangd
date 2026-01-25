@@ -1,0 +1,10 @@
+CompileFlags:
+  Add:
+    - -std=c++20
+    - -Wall
+    - -I/toDataDrive/ARE/include/
+  Remove:
+
+Diagnostics:
+  Includes:
+    AnalyzeAngledIncludes: No    # 可选：不分析系统头文件以提升性能 [citation:4]

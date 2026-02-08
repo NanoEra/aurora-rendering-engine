@@ -1,2 +1,41 @@
-/local_test/
-/build/
+# Build directories
+build/
+cmake-build-*/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Compiled files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+
+# CMake files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Output files
+output/
+*.ppm
+*.bmp
+*.png
+*.jpg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Experiments (optional, can be tracked)
+experiments/*
+!experiments/.gitkeep

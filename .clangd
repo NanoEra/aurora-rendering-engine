@@ -3,6 +3,9 @@ CompileFlags:
     - -std=c++20
     - -Wall
     - -I/toDataDrive/ARE/include/
+    - -I/toDataDrive/ARE/lib/glad/
+    - -I/toDataDrive/ARE/lib/stb/
+    - -I/toDataDrive/ARE/lib/spdlog/include/
   Remove:
 
 Diagnostics:

@@ -1,11 +1,10 @@
 /**
  * @file cpu_raytracer.cpp
- * @brief CPU ray tracing implementation
+ * @brief Implementation of CPURayTracer
  */
 
 #include <are/raytracer/cpu_raytracer.h>
-#include <are/raytracer/ray.h>
-#include <are/raytracer/hit_record.h>
+
 #include <are/acceleration/bvh.h>
 #include <are/scene/scene_manager.h>
 #include <are/scene/camera.h>
@@ -15,6 +14,7 @@
 #include <are/scene/point_light.h>
 #include <are/scene/spot_light.h>
 #include <are/rasterizer/gbuffer.h>
+
 #include <are/utils/random.h>
 #include <are/utils/math_utils.h>
 #include <are/core/logger.h>
@@ -22,285 +22,300 @@
 
 #include <glad/glad.h>
 #include <glm/glm.hpp>
-#include <algorithm>
-#include <cmath>
 
-#ifdef ARE_USE_OPENMP
-#include <omp.h>
-#endif
+#include <algorithm>
+#include <limits>
+#include <stdexcept>
+
+// #ifdef ARE_USE_OPENMP
+// #include <omp.h>
+// #endif
 
 namespace are {
+
+namespace {
+
+/**
+ * @brief Apply simple Reinhard tonemapping.
+ * @param c HDR color
+ * @param exposure Exposure value
+ * @return LDR color in [0,1]
+ */
+inline Vec3 tonemap_reinhard(const Vec3& c, Real exposure) {
+    Vec3 x = c * exposure;
+    return x / (Vec3(1.0f) + x);
+}
+
+/**
+ * @brief Offset ray origin to reduce self-intersection.
+ * @param p Hit position
+ * @param n Shading normal
+ * @return Offset position
+ */
+inline Vec3 offset_ray_origin(const Vec3& p, const Vec3& n) {
+    return p + n * (are_epsilon * 10.0f);
+}
+
+} // namespace
 
 CPURayTracer::CPURayTracer(const RayTracingConfig& config)
     : RayTracer(config)
     , bvh_(nullptr)
     , scene_(nullptr)
+    , framebuffer_()
     , width_(0)
-    , height_(0)
-{
-    ARE_LOG_INFO("CPU ray tracer initialized");
+    , height_(0) {
 }
 
-CPURayTracer::~CPURayTracer() {
-    ARE_LOG_INFO("CPU ray tracer destroyed");
-}
+CPURayTracer::~CPURayTracer() = default;
 
 void CPURayTracer::update_bvh(const BVH& bvh) {
     bvh_ = &bvh;
-    ARE_LOG_INFO("BVH updated for CPU ray tracer (" + 
-                 std::to_string(bvh.get_nodes().size()) + " nodes)");
 }
 
-void CPURayTracer::render(const SceneManager& scene, 
-                         const Camera& camera,
-                         const GBuffer* gbuffer,
-                         uint32_t output_texture) {
+void CPURayTracer::render(const SceneManager& scene,
+                          const Camera& camera,
+                          const GBuffer* gbuffer,
+                          uint32_t output_texture) {
     ARE_PROFILE_FUNCTION();
-    
+
     if (!bvh_ || !bvh_->is_built()) {
-        ARE_LOG_ERROR("BVH not built, cannot render");
+        ARE_LOG_ERROR("CPURayTracer: BVH is null or not built");
         return;
     }
-    
+
+    if (!gbuffer) {
+        ARE_LOG_CRITICAL("CPURayTracer: GBuffer is null, cannot infer render resolution");
+        throw std::runtime_error("CPURayTracer requires a valid GBuffer for resolution");
+    }
+
+    if (output_texture == 0) {
+        ARE_LOG_ERROR("CPURayTracer: output_texture is 0");
+        return;
+    }
+
     scene_ = &scene;
-    
-    // Get framebuffer size from output texture
-    glBindTexture(GL_TEXTURE_2D, output_texture);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width_);
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height_);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    
+    width_ = gbuffer->get_width();
+    height_ = gbuffer->get_height();
+
     if (width_ <= 0 || height_ <= 0) {
-        ARE_LOG_ERROR("Invalid output texture dimensions");
+        ARE_LOG_ERROR("CPURayTracer: Invalid render resolution");
         return;
     }
-    
-    // Resize framebuffer if needed
-    size_t pixel_count = width_ * height_;
-    if (framebuffer_.size() != pixel_count) {
-        framebuffer_.resize(pixel_count);
-        ARE_LOG_INFO("Framebuffer resized to " + std::to_string(width_) + "x" + std::to_string(height_));
-    }
-    
-    // Render using ray tracing
-    ARE_LOG_INFO("Starting CPU ray tracing (" + std::to_string(config_.spp) + " spp)");
-    
-    const int spp = config_.spp;
-    const Real inv_spp = 1.0f / static_cast<Real>(spp);
-    
-    #ifdef ARE_USE_OPENMP
-    #pragma omp parallel for schedule(dynamic, 16)
-    #endif
+
+    const int spp = std::max(1, config_.spp);
+    const int max_depth = std::max(1, config_.max_depth);
+
+    framebuffer_.assign(static_cast<size_t>(width_ * height_), Vec4(0.0f));
+
+// #ifdef ARE_USE_OPENMP
+//     #pragma omp parallel for schedule(dynamic, 1)
+// #endif
     for (int y = 0; y < height_; ++y) {
+        RandomGenerator& rng = get_thread_random();
+
         for (int x = 0; x < width_; ++x) {
-            Vec3 color(0.0f);
-            
-            // Multi-sampling
+            Vec3 hdr(0.0f);
+
             for (int s = 0; s < spp; ++s) {
-                // Jittered sampling
-                Real u = (x + random_float()) / static_cast<Real>(width_);
-                Real v = (y + random_float()) / static_cast<Real>(height_);
-                
-                // Generate ray
-                Vec3 ray_origin, ray_direction;
-                camera.generate_ray(u, v, ray_origin, ray_direction);
-                
-                Ray ray(ray_origin, ray_direction);
-                
-                // Trace ray
-                color += trace_ray(ray, 0);
+                Real u = (static_cast<Real>(x) + rng.random_float()) / static_cast<Real>(width_);
+                Real v = (static_cast<Real>(y) + rng.random_float()) / static_cast<Real>(height_);
+
+                Vec3 origin;
+                Vec3 direction;
+                camera.generate_ray(u, v, origin, direction);
+
+                Ray ray(origin, direction, are_epsilon, 1e30f);
+                hdr += trace_ray(ray, max_depth);
             }
-            
-            // Average samples
-            color *= inv_spp;
-            
-            // Store in framebuffer
-            size_t index = y * width_ + x;
-            framebuffer_[index] = color;
-        }
-        
-        // Progress logging (every 10%)
-        if (y % (height_ / 10) == 0) {
-            Real progress = 100.0f * y / height_;
-            ARE_LOG_INFO("Ray tracing progress: " + std::to_string(static_cast<int>(progress)) + "%");
+
+            hdr /= static_cast<Real>(spp);
+
+            // Phase 5: tonemap in tracer for standalone output
+            Vec3 ldr = tonemap_reinhard(hdr, 1.0f);
+            framebuffer_[static_cast<size_t>(y * width_ + x)] = Vec4(ldr, 1.0f);
         }
     }
-    
-    ARE_LOG_INFO("Ray tracing complete, uploading to GPU");
-    
-    // Upload to GPU texture
+
+    // Upload to output texture (recommended internal format: GL_RGBA16F)
     glBindTexture(GL_TEXTURE_2D, output_texture);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, 
-                    GL_RGB, GL_FLOAT, framebuffer_.data());
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, GL_RGBA, GL_FLOAT, framebuffer_.data());
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 Vec3 CPURayTracer::trace_ray(const Ray& ray, int depth) {
-    // Russian roulette termination
-    if (depth >= config_.max_depth) {
+    ARE_PROFILE_FUNCTION();
+
+    if (depth <= 0) {
         return Vec3(0.0f);
     }
-    
-    // Intersect with scene
+
     HitRecord hit;
     if (!bvh_->intersect(ray, hit)) {
-        // Sky color (simple gradient)
-        Real t = 0.5f * (ray.direction_.y + 1.0f);
-        return glm::mix(Vec3(1.0f), Vec3(0.5f, 0.7f, 1.0f), t);
+        // Simple sky
+        Vec3 unit_dir = glm::normalize(ray.direction_);
+        Real t = 0.5f * (unit_dir.y + 1.0f);
+        return lerp(Vec3(1.0f), Vec3(0.5f, 0.7f, 1.0f), t);
     }
-    
-    // Shade hit point
+
     return shade(hit, ray, depth);
 }
 
 Vec3 CPURayTracer::shade(const HitRecord& hit, const Ray& ray, int depth) {
-	// Random real generator
-    thread_local RandomGenerator generator;
+    ARE_PROFILE_FUNCTION();
 
-    // Get material
-    const Material* material = scene_->get_material(hit.material_);
-    if (!material) {
-        return Vec3(1.0f, 0.0f, 1.0f); // Magenta for missing material
+    Vec3 albedo(0.8f);
+    Real metallic = 0.0f;
+    Real roughness = 0.5f;
+
+    if (scene_) {
+        const Material* mat = scene_->get_material(hit.material_);
+        if (mat) {
+            albedo = mat->get_albedo();
+            metallic = mat->get_metallic();
+            roughness = mat->get_roughness();
+        }
     }
-    
-    // Get material properties
-    Vec3 albedo = material->get_albedo();
-    Real metallic = material->get_metallic();
-    Real roughness = material->get_roughness();
-    Vec3 emissive = material->get_emissive();
-    
-    // Emissive materials
-    if (material->is_emissive()) {
-        return emissive;
-    }
-    
-    // Compute direct lighting
-    Vec3 direct_lighting = compute_direct_lighting(hit);
-    
-    // Compute ambient occlusion
+
+    Vec3 direct = compute_direct_lighting(hit);
     Real ao = 1.0f;
+
     if (config_.enable_ao) {
         ao = compute_ambient_occlusion(hit);
     }
-    
-    // Simple diffuse shading
-    Vec3 color = albedo * direct_lighting * ao;
-    
-    // Global illumination (indirect lighting)
-    if (config_.enable_gi && depth < config_.max_depth - 1) {
-        // Generate random direction in hemisphere
-        Vec3 scatter_direction = generator.random_cosine_direction(hit.normal_);
-        
-        // Trace secondary ray
-        Ray scatter_ray(hit.position_ + hit.normal_ * are_epsilon, scatter_direction);
-        Vec3 indirect = trace_ray(scatter_ray, depth + 1);
-        
-        // Add indirect lighting (weighted by albedo)
-        color += albedo * indirect * 0.5f;
+
+    Vec3 result = direct * ao;
+
+    if (config_.enable_gi && depth > 1) {
+        RandomGenerator& rng = get_thread_random();
+        Vec3 bounce_dir = rng.random_cosine_direction(hit.normal_);
+        Ray bounce_ray(offset_ray_origin(hit.position_, hit.normal_), bounce_dir, are_epsilon, 1e30f);
+
+        Vec3 bounced = trace_ray(bounce_ray, depth - 1);
+        result += albedo * bounced * 0.5f;
     }
-    
-    return color;
+
+    // Phase 5: Lambert base
+    result *= albedo;
+
+    (void)ray;
+    (void)metallic;
+    (void)roughness;
+
+    return result;
 }
 
 Vec3 CPURayTracer::compute_direct_lighting(const HitRecord& hit) {
+    ARE_PROFILE_FUNCTION();
+
     Vec3 lighting(0.0f);
-    
+    if (!scene_) {
+        return lighting;
+    }
+
     const auto& lights = scene_->get_all_lights();
-    
-    for (const auto& light : lights) {
-        if (!light) continue;
-        
-        // Check if light affects this point
-        if (!light->affects_point(hit.position_)) {
+    for (const auto& light_ptr : lights) {
+        if (!light_ptr) {
             continue;
         }
-        
-        Vec3 light_dir;
-        Vec3 light_color = light->get_color() * light->get_intensity();
-        Real light_distance = 1e30f;
-        
-        // Compute light direction based on type
-        if (light->get_type() == LightType::ARE_LIGHT_DIRECTIONAL) {
-            auto* dir_light = static_cast<const DirectionalLight*>(light.get());
-            light_dir = -dir_light->get_direction();
-            light_distance = 1e30f; // Infinite distance
-        }
-        else if (light->get_type() == LightType::ARE_LIGHT_POINT) {
-            auto* point_light = static_cast<const PointLight*>(light.get());
-            Vec3 to_light = point_light->get_position() - hit.position_;
-            light_distance = glm::length(to_light);
-            light_dir = to_light / light_distance;
-            
-            // Apply attenuation
-            Real attenuation = point_light->calculate_attenuation(light_distance);
-            light_color *= attenuation;
-        }
-        else if (light->get_type() == LightType::ARE_LIGHT_SPOT) {
-            auto* spot_light = static_cast<const SpotLight*>(light.get());
-            Vec3 to_light = spot_light->get_position() - hit.position_;
-            light_distance = glm::length(to_light);
-            light_dir = to_light / light_distance;
-            
-            // Apply spotlight factor
-            Real spot_factor = spot_light->calculate_spot_factor(-light_dir);
-            if (spot_factor <= 0.0f) {
-                continue; // Outside spotlight cone
+
+        Vec3 L(0.0f);
+        Real max_distance = 1e30f;
+        Real attenuation = 1.0f;
+
+        const LightType type = light_ptr->get_type();
+
+        if (type == LightType::ARE_LIGHT_DIRECTIONAL) {
+            const auto* dl = static_cast<const DirectionalLight*>(light_ptr.get());
+            L = -glm::normalize(dl->get_direction());
+        } else if (type == LightType::ARE_LIGHT_POINT) {
+            const auto* pl = static_cast<const PointLight*>(light_ptr.get());
+            Vec3 to_light = pl->get_position() - hit.position_;
+            Real dist = glm::length(to_light);
+            if (dist < are_epsilon) {
+                continue;
             }
-            
-            light_color *= spot_factor;
+            if (!pl->affects_point(hit.position_)) {
+                continue;
+            }
+            L = to_light / dist;
+            max_distance = dist;
+            attenuation = pl->calculate_attenuation(dist);
+        } else if (type == LightType::ARE_LIGHT_SPOT) {
+            const auto* sl = static_cast<const SpotLight*>(light_ptr.get());
+            Vec3 to_light = sl->get_position() - hit.position_;
+            Real dist = glm::length(to_light);
+            if (dist < are_epsilon) {
+                continue;
+            }
+            if (!sl->affects_point(hit.position_)) {
+                continue;
+            }
+            L = to_light / dist;
+            max_distance = dist;
+
+            Vec3 light_to_point = glm::normalize(hit.position_ - sl->get_position());
+            Real spot = sl->calculate_spot_factor(light_to_point);
+            attenuation *= spot;
+        } else {
+            continue;
         }
-        
-        // Shadow test
-        bool in_shadow = false;
-        if (light->get_cast_shadows()) {
-            in_shadow = is_in_shadow(hit.position_ + hit.normal_ * are_epsilon, 
-                                    light_dir, light_distance);
+
+        if (light_ptr->get_cast_shadows()) {
+            if (is_in_shadow(offset_ray_origin(hit.position_, hit.normal_), L, max_distance)) {
+                continue;
+            }
         }
-        
-        if (!in_shadow) {
-            // Lambertian diffuse
-            Real n_dot_l = glm::max(glm::dot(hit.normal_, light_dir), 0.0f);
-            lighting += light_color * n_dot_l;
+
+        Real n_dot_l = std::max(0.0f, glm::dot(hit.normal_, L));
+        if (n_dot_l <= 0.0f) {
+            continue;
         }
+
+        Vec3 radiance = light_ptr->get_color() * light_ptr->get_intensity();
+        lighting += radiance * n_dot_l * attenuation;
     }
-    
-    // Add ambient term
-    lighting += Vec3(0.03f);
-    
+
     return lighting;
 }
 
 Real CPURayTracer::compute_ambient_occlusion(const HitRecord& hit) {
-	// Random real generator
-    thread_local RandomGenerator generator;
+    ARE_PROFILE_FUNCTION();
 
-    const int num_samples = config_.ao_samples;
-    const Real radius = config_.ao_radius;
-    
-    int occluded_count = 0;
-    
-    for (int i = 0; i < num_samples; ++i) {
-        // Generate random direction in hemisphere
-        Vec3 sample_dir = generator.random_in_hemisphere(hit.normal_);
-        
-        // Cast AO ray
-        Ray ao_ray(hit.position_ + hit.normal_ * are_epsilon, sample_dir, 
-                   are_epsilon, radius);
-        
-        // Check if ray hits anything within radius
+    if (!bvh_) {
+        return 1.0f;
+    }
+
+    const int ao_samples = std::max(1, config_.ao_samples);
+    const Real radius = std::max(are_epsilon, config_.ao_radius);
+
+    RandomGenerator& rng = get_thread_random();
+
+    int occluded = 0;
+    for (int i = 0; i < ao_samples; ++i) {
+        Vec3 dir = rng.random_in_hemisphere(hit.normal_);
+        Ray ao_ray(offset_ray_origin(hit.position_, hit.normal_), dir, are_epsilon, radius);
+
         if (bvh_->intersect_any(ao_ray, radius)) {
-            occluded_count++;
+            occluded++;
         }
     }
-    
-    // AO factor (1.0 = no occlusion, 0.0 = full occlusion)
-    Real ao = 1.0f - (static_cast<Real>(occluded_count) / num_samples);
-    return ao;
+
+    Real occ = static_cast<Real>(occluded) / static_cast<Real>(ao_samples);
+    return 1.0f - occ;
 }
 
 bool CPURayTracer::is_in_shadow(const Vec3& origin, const Vec3& direction, Real max_distance) {
-    Ray shadow_ray(origin, direction, are_epsilon, max_distance - are_epsilon);
-    return bvh_->intersect_any(shadow_ray, max_distance);
+    ARE_PROFILE_FUNCTION();
+
+    if (!bvh_) {
+        return false;
+    }
+
+    Real t_max = (max_distance > 0.0f) ? max_distance : 1e30f;
+    Ray shadow_ray(origin, direction, are_epsilon, t_max);
+    return bvh_->intersect_any(shadow_ray, t_max);
 }
 
 } // namespace are

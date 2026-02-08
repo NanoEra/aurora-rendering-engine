@@ -3,6 +3,7 @@
  * @brief Phase 5 verification program - CPU ray tracing test (RGBA16F output)
  */
 
+#include <iostream>
 #include <are/core/config.h>
 #include <are/core/logger.h>
 #include <are/core/profiler.h>
@@ -265,9 +266,9 @@ void main() {
 	rtc.backend = RayTracingBackend::ARE_RT_BACKEND_CPU;
 	rtc.spp = 1;
 	rtc.max_depth = 4;
-	rtc.enable_gi = true;
-	rtc.enable_ao = true;
-	rtc.ao_samples = 8;
+	rtc.enable_gi = false;
+	rtc.enable_ao = false;
+	rtc.ao_samples = 1;
 	rtc.ao_radius = 1.0f;
 
 	CPURayTracer tracer(rtc);
@@ -283,6 +284,7 @@ void main() {
 	bool request_render = true;
 
 	while (!window.should_close()) {
+		std::cout << "RENDERING" << std::endl;
 		window.poll_events();
 
 		if (window.is_key_pressed(256)) {
@@ -314,13 +316,23 @@ void main() {
 		int new_fb_w = 0;
 		int new_fb_h = 0;
 		window.get_framebuffer_size(new_fb_w, new_fb_h);
+
+		// If minimized / invalid size: keep window responsive, skip rendering
+		if (new_fb_w <= 0 || new_fb_h <= 0) {
+			window.swap_buffers();
+			continue;
+		}
+
 		if (new_fb_w != fb_w || new_fb_h != fb_h) {
 			fb_w = new_fb_w;
 			fb_h = new_fb_h;
+
 			rasterizer.resize(fb_w, fb_h);
 
 			glDeleteTextures(1, &output_tex);
 			output_tex = create_output_texture_rgba16f(fb_w, fb_h);
+
+			camera.set_aspect_ratio(static_cast<Real>(fb_w) / static_cast<Real>(fb_h));
 
 			request_render = true;
 		}

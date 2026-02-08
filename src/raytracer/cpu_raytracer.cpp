@@ -163,47 +163,35 @@ Vec3 CPURayTracer::trace_ray(const Ray& ray, int depth) {
 }
 
 Vec3 CPURayTracer::shade(const HitRecord& hit, const Ray& ray, int depth) {
-    ARE_PROFILE_FUNCTION();
-
     Vec3 albedo(0.8f);
-    Real metallic = 0.0f;
-    Real roughness = 0.5f;
-
     if (scene_) {
         const Material* mat = scene_->get_material(hit.material_);
         if (mat) {
             albedo = mat->get_albedo();
-            metallic = mat->get_metallic();
-            roughness = mat->get_roughness();
         }
     }
 
     Vec3 direct = compute_direct_lighting(hit);
     Real ao = 1.0f;
-
     if (config_.enable_ao) {
         ao = compute_ambient_occlusion(hit);
     }
 
-    Vec3 result = direct * ao;
+    // Direct term (Lambert)
+    Vec3 Lo = albedo * direct * ao;
 
+    // Diffuse GI (cosine-weighted)
     if (config_.enable_gi && depth > 1) {
         RandomGenerator& rng = get_thread_random();
         Vec3 bounce_dir = rng.random_cosine_direction(hit.normal_);
         Ray bounce_ray(offset_ray_origin(hit.position_, hit.normal_), bounce_dir, are_epsilon, 1e30f);
 
-        Vec3 bounced = trace_ray(bounce_ray, depth - 1);
-        result += albedo * bounced * 0.5f;
+        Vec3 Li = trace_ray(bounce_ray, depth - 1);
+        Lo += albedo * Li;
     }
 
-    // Phase 5: Lambert base
-    result *= albedo;
-
     (void)ray;
-    (void)metallic;
-    (void)roughness;
-
-    return result;
+    return Lo;
 }
 
 Vec3 CPURayTracer::compute_direct_lighting(const HitRecord& hit) {

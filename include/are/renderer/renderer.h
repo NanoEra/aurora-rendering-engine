@@ -24,6 +24,7 @@ class SceneManager;
 class Rasterizer;
 class RayTracer;
 class TextureManager;
+class BVH;
 
 /**
  * @class Renderer
@@ -109,6 +110,7 @@ private:
     std::unique_ptr<Rasterizer> rasterizer_; ///< Rasterization pipeline
     std::unique_ptr<RayTracer> raytracer_; ///< Ray tracing pipeline
     std::unique_ptr<TextureManager> texture_manager_; ///< Texture management
+    std::unique_ptr<BVH> bvh_;            ///< BVH acceleration structure
 
     Camera camera_;                       ///< Active camera
     RenderStats stats_;                   ///< Rendering statistics

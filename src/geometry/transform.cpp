@@ -1,10 +1,11 @@
 /**
  * @file transform.cpp
- * @brief Implementation of transformation utilities
+ * @brief Implementation of Transform class
  */
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <are/geometry/transform.h>
+#include <are/core/profiler.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/euler_angles.hpp>
 
@@ -16,7 +17,7 @@ Transform::Transform()
     , scale_(1.0f)
     , matrix_(1.0f)
     , inverse_matrix_(1.0f)
-    , dirty_(false) {
+    , dirty_(true) {
 }
 
 Transform::Transform(const Vec3& position, const Vec3& rotation, const Vec3& scale)
@@ -66,27 +67,62 @@ Mat3 Transform::get_normal_matrix() const {
     if (dirty_) {
         update_matrix();
     }
+    // Normal matrix is the transpose of the inverse of the upper-left 3x3
     return glm::transpose(glm::inverse(Mat3(matrix_)));
 }
 
 Vec3 Transform::transform_point(const Vec3& point) const {
-    Vec4 result = get_matrix() * Vec4(point, 1.0f);
-    return Vec3(result) / result.w;
+    if (dirty_) {
+        update_matrix();
+    }
+    Vec4 result = matrix_ * Vec4(point, 1.0f);
+    return Vec3(result);
 }
 
 Vec3 Transform::transform_direction(const Vec3& direction) const {
-    return Vec3(get_matrix() * Vec4(direction, 0.0f));
+    if (dirty_) {
+        update_matrix();
+    }
+    Vec4 result = matrix_ * Vec4(direction, 0.0f);
+    return Vec3(result);
 }
 
 Vec3 Transform::transform_normal(const Vec3& normal) const {
-    return glm::normalize(get_normal_matrix() * normal);
+    Mat3 normal_matrix = get_normal_matrix();
+    return glm::normalize(normal_matrix * normal);
 }
 
 Transform Transform::operator*(const Transform& other) const {
+    ARE_PROFILE_FUNCTION();
+    
+    // Combine transforms by multiplying matrices
+    // Note: This is an approximation; for exact results, 
+    // we would need to decompose the combined matrix
     Transform result;
-    result.matrix_ = get_matrix() * other.get_matrix();
-    result.inverse_matrix_ = other.get_inverse_matrix() * get_inverse_matrix();
-    result.dirty_ = false;
+    
+    Mat4 combined = get_matrix() * other.get_matrix();
+    
+    // Extract translation
+    result.position_ = Vec3(combined[3]);
+    
+    // Extract scale (approximate)
+    result.scale_.x = glm::length(Vec3(combined[0]));
+    result.scale_.y = glm::length(Vec3(combined[1]));
+    result.scale_.z = glm::length(Vec3(combined[2]));
+    
+    // Remove scale from matrix to extract rotation
+    Mat3 rotation_matrix;
+    rotation_matrix[0] = Vec3(combined[0]) / result.scale_.x;
+    rotation_matrix[1] = Vec3(combined[1]) / result.scale_.y;
+    rotation_matrix[2] = Vec3(combined[2]) / result.scale_.z;
+    
+    // Extract Euler angles (approximate, may have gimbal lock issues)
+    result.rotation_.x = std::atan2(rotation_matrix[2][1], rotation_matrix[2][2]);
+    result.rotation_.y = std::atan2(-rotation_matrix[2][0],std::sqrt(rotation_matrix[2][1] * rotation_matrix[2][1] + 
+                  rotation_matrix[2][2] * rotation_matrix[2][2]));
+    result.rotation_.z = std::atan2(rotation_matrix[1][0], rotation_matrix[0][0]);
+    
+    result.dirty_ = true;
     return result;
 }
 
@@ -111,12 +147,22 @@ void Transform::mark_dirty() {
 }
 
 void Transform::update_matrix() const {
-    // Build transformation matrix: T * R * S
-    Mat4 translation = glm::translate(Mat4(1.0f), position_);
-    Mat4 rotation = glm::eulerAngleYXZ(rotation_.y, rotation_.x, rotation_.z);
-    Mat4 scale = glm::scale(Mat4(1.0f), scale_);
+    ARE_PROFILE_FUNCTION();
     
-    matrix_ = translation * rotation * scale;
+    // Build transformation matrix: T * R * S
+    // Translation
+    Mat4 translation_matrix = glm::translate(Mat4(1.0f), position_);
+    
+    // Rotation (using Euler angles: YXZ order for typical camera/object rotation)
+    Mat4 rotation_matrix = glm::eulerAngleYXZ(rotation_.y, rotation_.x, rotation_.z);
+    
+    // Scale
+    Mat4 scale_matrix = glm::scale(Mat4(1.0f), scale_);
+    
+    // Combine: T * R * S
+    matrix_ = translation_matrix * rotation_matrix * scale_matrix;
+    
+    // Compute inverse
     inverse_matrix_ = glm::inverse(matrix_);
     
     dirty_ = false;

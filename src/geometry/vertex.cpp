@@ -1,13 +1,14 @@
 /**
  * @file vertex.cpp
- * @brief Implementation of vertex structure
+ * @brief Implementation of Vertex structure
  */
 
 #include <are/geometry/vertex.h>
+#include <glm/glm.hpp>
 
 namespace are {
 
-Vertex::Vertex(const Vec3& pos) 
+Vertex::Vertex(const Vec3& pos)
     : position_(pos)
     , normal_(0.0f, 1.0f, 0.0f)
     , texcoord_(0.0f, 0.0f)

@@ -95,8 +95,20 @@ public:
     void clear();
 
 private:
+    // Recursive traversal (kept for reference)
     bool intersect_recursive(uint32_t node_index, const Ray& ray, HitRecord& hit) const;
     bool intersect_any_recursive(uint32_t node_index, const Ray& ray, Real t_max) const;
+    
+    // Optimized iterative traversal
+    bool intersect_iterative(const Ray& ray, HitRecord& hit) const;
+    bool intersect_any_iterative(const Ray& ray, Real t_max) const;
+    
+    // Fast intersection helpers
+    inline bool intersect_aabb_fast(const AABB& bounds, const Ray& ray,
+                                    const Vec3& inv_dir, Real t_max,
+                                    Real& t_min_out, Real& t_max_out) const;
+    inline bool intersect_triangle_fast(const Triangle& triangle, const Ray& ray,
+                                       Real t_max, HitRecord& hit) const;
 
     std::vector<BVHNode> nodes_;          ///< BVH nodes
     std::vector<uint32_t> primitive_indices_; ///< Primitive index array

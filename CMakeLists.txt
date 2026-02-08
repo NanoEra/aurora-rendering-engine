@@ -181,6 +181,10 @@ if(ARE_BUILD_EXAMPLES)
     
     # Add example subdirectories
     add_subdirectory(examples/00_phase1_test)
+	add_subdirectory(examples/01_phase2_test)
+	add_subdirectory(examples/02_visual_test)
+	add_subdirectory(examples/02_phase3_test)
+	add_subdirectory(examples/03_phase4_test)
     
     message(STATUS "Examples will be built")
 endif()

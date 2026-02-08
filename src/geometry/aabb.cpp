@@ -1,18 +1,20 @@
 /**
  * @file aabb.cpp
- * @brief Implementation of axis-aligned bounding box
+ * @brief Implementation of Axis-Aligned Bounding Box
  */
 
 #include <are/geometry/aabb.h>
 #include <are/raytracer/ray.h>
-#include <limits>
+#include <are/core/logger.h>
+#include <glm/glm.hpp>
 #include <algorithm>
+#include <limits>
 
 namespace are {
 
-AABB::AABB() 
-    : min_(std::numeric_limits<Real>::max())
-    , max_(std::numeric_limits<Real>::lowest()) {
+AABB::AABB()
+    : min_(std::numeric_limits<float>::max())
+    , max_(std::numeric_limits<float>::lowest()) {
 }
 
 AABB::AABB(const Vec3& min, const Vec3& max)
@@ -49,7 +51,6 @@ Real AABB::volume() const {
 
 int AABB::longest_axis() const {
     Vec3 d = size();
-    
     if (d.x > d.y && d.x > d.z) {
         return 0;
     } else if (d.y > d.z) {
@@ -65,8 +66,10 @@ void AABB::expand(const Vec3& point) {
 }
 
 void AABB::expand(const AABB& other) {
-    min_ = glm::min(min_, other.min_);
-    max_ = glm::max(max_, other.max_);
+    if (other.is_valid()) {
+        min_ = glm::min(min_, other.min_);
+        max_ = glm::max(max_, other.max_);
+    }
 }
 
 bool AABB::contains(const Vec3& point) const {
@@ -76,27 +79,44 @@ bool AABB::contains(const Vec3& point) const {
 }
 
 bool AABB::intersects(const AABB& other) const {
-    return (min_.x <= other.max_.x && max_.x >= other.min_.x) &&
-           (min_.y <= other.max_.y && max_.y >= other.min_.y) &&
-           (min_.z <= other.max_.z && max_.z >= other.min_.z);
+    return min_.x <= other.max_.x && max_.x >= other.min_.x &&
+           min_.y <= other.max_.y && max_.y >= other.min_.y &&
+           min_.z <= other.max_.z && max_.z >= other.min_.z;
 }
 
-bool AABB::intersect_ray(const Ray& ray, Real& t_min, Real& t_max) const {
-    // Optimized ray-AABB intersection (slab method)
-    Vec3 inv_dir = 1.0f / ray.direction_;
-    Vec3 t0 = (min_ - ray.origin_) * inv_dir;
-    Vec3 t1 = (max_ - ray.origin_) * inv_dir;
+bool AABB::intersect_ray(const Ray& ray, Real& t_min_out, Real& t_max_out) const {
+    // Slab method for ray-AABB intersection
+    // Reference: "An Efficient and Robust Ray-Box Intersection Algorithm" by Williams et al.
     
-    Vec3 t_near = glm::min(t0, t1);
-    Vec3 t_far = glm::max(t0, t1);
-    
-    t_min = glm::max(glm::max(t_near.x, t_near.y), t_near.z);
-    t_max = glm::min(glm::min(t_far.x, t_far.y), t_far.z);
-    
-    return t_max >= t_min && t_max >= ray.t_min_;
+    Real t_min = ray.t_min_;
+    Real t_max = ray.t_max_;
+
+    for (int i = 0; i < 3; ++i) {
+        Real inv_d = 1.0f / ray.direction_[i];
+        Real t0 = (min_[i] - ray.origin_[i]) * inv_d;
+        Real t1 = (max_[i] - ray.origin_[i]) * inv_d;
+
+        if (inv_d < 0.0f) {
+            std::swap(t0, t1);
+        }
+
+        t_min = t0 > t_min ? t0 : t_min;
+        t_max = t1 < t_max ? t1 : t_max;
+
+        if (t_max < t_min) {
+            return false;
+        }
+    }
+
+    t_min_out = t_min;
+    t_max_out = t_max;
+    return true;
 }
 
 AABB AABB::merge(const AABB& a, const AABB& b) {
+    if (!a.is_valid()) return b;
+    if (!b.is_valid()) return a;
+    
     return AABB(
         glm::min(a.min_, b.min_),
         glm::max(a.max_, b.max_)

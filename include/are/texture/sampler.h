@@ -7,12 +7,9 @@
 #define ARE_INCLUDE_TEXTURE_SAMPLER_H
 
 #include <are/core/types.h>
+#include <are/texture/texture.h>
 
 namespace are {
-
-// Forward declaration
-class Texture;
-class TextureWrap;
 
 /**
  * @class Sampler

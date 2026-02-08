@@ -7,12 +7,10 @@
 #define ARE_INCLUDE_RAYTRACER_COMPUTE_RAYTRACER_H
 
 #include <are/raytracer/raytracer.h>
+#include <are/rasterizer/shader_program.h>
 #include <memory>
 
 namespace are {
-
-// Forward declarations
-class ShaderProgram;
 
 /**
  * @class ComputeRayTracer

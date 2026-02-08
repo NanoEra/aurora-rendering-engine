@@ -1,14 +1,16 @@
 /**
  * @file material.cpp
- * @brief Implementation of PBR material
+ * @brief Implementation of PBR Material class
  */
 
 #include <are/scene/material.h>
+#include <are/core/logger.h>
+#include <are/utils/math_utils.h>
 
 namespace are {
 
 Material::Material()
-    : albedo_(0.8f, 0.8f, 0.8f)
+    : albedo_(1.0f, 1.0f, 1.0f)
     , metallic_(0.0f)
     , roughness_(0.5f)
     , emissive_(0.0f, 0.0f, 0.0f)
@@ -21,7 +23,10 @@ Material::Material()
 }
 
 void Material::set_albedo(const Vec3& albedo) {
-    albedo_ = albedo;
+    // Clamp albedo to valid range [0, 1]
+    albedo_.x = clamp(albedo.x, 0.0f, 1.0f);
+    albedo_.y = clamp(albedo.y, 0.0f, 1.0f);
+    albedo_.z = clamp(albedo.z, 0.0f, 1.0f);
 }
 
 void Material::set_albedo_map(const std::string& path) {
@@ -29,7 +34,7 @@ void Material::set_albedo_map(const std::string& path) {
 }
 
 void Material::set_metallic(Real metallic) {
-    metallic_ = glm::clamp(metallic, 0.0f, 1.0f);
+    metallic_ = clamp(metallic, 0.0f, 1.0f);
 }
 
 void Material::set_metallic_map(const std::string& path) {
@@ -37,7 +42,8 @@ void Material::set_metallic_map(const std::string& path) {
 }
 
 void Material::set_roughness(Real roughness) {
-    roughness_ = glm::clamp(roughness, 0.0f, 1.0f);
+    // Clamp roughness to avoid division by zero in BRDF calculations
+    roughness_ = clamp(roughness, 0.04f, 1.0f);
 }
 
 void Material::set_roughness_map(const std::string& path) {
@@ -53,7 +59,10 @@ void Material::set_ao_map(const std::string& path) {
 }
 
 void Material::set_emissive(const Vec3& emissive) {
-    emissive_ = emissive;
+    // Emissive can be HDR, so no upper clamp
+    emissive_.x = std::max(0.0f, emissive.x);
+    emissive_.y = std::max(0.0f, emissive.y);
+    emissive_.z = std::max(0.0f, emissive.z);
 }
 
 void Material::set_emissive_map(const std::string& path) {
@@ -61,7 +70,12 @@ void Material::set_emissive_map(const std::string& path) {
 }
 
 bool Material::is_emissive() const {
-    return glm::length(emissive_) > are_epsilon || !emissive_map_.empty();
+    // Check if material has significant emission
+    const Real threshold = 0.001f;
+    return (emissive_.x > threshold || 
+            emissive_.y > threshold || 
+            emissive_.z > threshold) ||
+           has_emissive_map();
 }
 
 } // namespace are

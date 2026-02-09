@@ -54,7 +54,7 @@ private:
     uint width_;
     uint height_;
     FramebufferHandle fbo_;
-    TextureHandle textures_[GBUFFER_TEXTURE_COUNT];
+    TextureHandle textures_[GBUFFER_COUNT];
     TextureHandle depth_texture_;
     
     bool initialized_;

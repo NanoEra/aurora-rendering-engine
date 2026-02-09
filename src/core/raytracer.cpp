@@ -143,8 +143,8 @@ void RayTracer::trace(const Scene& scene, const GBuffer& gbuffer, TextureHandle 
     bind_gbuffer_(gbuffer);
     
     // Bind output and accumulation textures
-    glBindImageTexture(GBUFFER_TEXTURE_COUNT, output_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
-    glBindImageTexture(GBUFFER_TEXTURE_COUNT + 1, accumulation_texture_, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+    glBindImageTexture(3, output_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+    glBindImageTexture(4, accumulation_texture_, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
     
     // Bind BVH buffers if enabled
     if (config_.use_bvh_ && bvh_built_) {
@@ -234,14 +234,14 @@ void RayTracer::upload_scene_data_(const Scene& scene) {
     // Upload materials
     const auto& materials = scene.get_materials();
     if (!materials.empty()) {
-        // 使用 vec4 确保对齐正确
-        struct alignas(16) MaterialData {
-            Vec4 albedo_metallic;      // xyz = albedo, w = metallic
-            Vec4 emission_roughness;   // xyz = emission, w = roughness
+        struct MaterialData {
+            Vec3 albedo;
+            float metallic;
+            Vec3 emission;
+            float roughness;
             int type;
             float ior;
-            float padding1;
-            float padding2;
+            Vec2 padding;
         };
         
         std::vector<MaterialData> material_data;
@@ -249,29 +249,13 @@ void RayTracer::upload_scene_data_(const Scene& scene) {
         
         for (const auto& mat : materials) {
             MaterialData data;
-            data.albedo_metallic = Vec4(mat->get_albedo(), mat->get_metallic());
-            data.emission_roughness = Vec4(mat->get_emission(), mat->get_roughness());
+            data.albedo = mat->get_albedo();
+            data.metallic = mat->get_metallic();
+            data.emission = mat->get_emission();
+            data.roughness = mat->get_roughness();
             data.type = static_cast<int>(mat->get_type());
             data.ior = mat->get_ior();
-            data.padding1 = 0.0f;
-            data.padding2 = 0.0f;
             material_data.push_back(data);
-        }
-        
-        // 打印调试信息
-        Logger::info("MaterialData size: " + std::to_string(sizeof(MaterialData)) + " bytes");
-        Logger::info("Material[0] albedo: (" + 
-                    std::to_string(material_data[0].albedo_metallic.x) + ", " +
-                    std::to_string(material_data[0].albedo_metallic.y) + ", " +
-                    std::to_string(material_data[0].albedo_metallic.z) + ")");
-        Logger::info("Material[0] metallic: " + std::to_string(material_data[0].albedo_metallic.w));
-        
-        // 找到金属材质并打印
-        for (size_t i = 0; i < material_data.size(); i++) {
-            if (material_data[i].albedo_metallic.w > 0.5f) {
-                Logger::info("Material[" + std::to_string(i) + "] is metallic: " + 
-                            std::to_string(material_data[i].albedo_metallic.w));
-            }
         }
         
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, material_buffer_);
@@ -279,22 +263,20 @@ void RayTracer::upload_scene_data_(const Scene& scene) {
                     material_data.size() * sizeof(MaterialData),
                     material_data.data(), GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, material_buffer_);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-        
-        Logger::info("Uploaded " + std::to_string(material_data.size()) + " materials to GPU");
-    } else {
-        Logger::warning("No materials to upload");
     }
     
-    // Upload lights (保持不变)
+    // Upload lights
     const auto& lights = scene.get_lights();
     if (!lights.empty()) {
-        // 同样使用 vec4 确保对齐
-        struct alignas(16) LightData {
-            Vec4 position_type;      // xyz = position, w = type (as float)
-            Vec4 direction_intensity; // xyz = direction, w = intensity
-            Vec4 color_range;        // xyz = color, w = range
-            Vec4 spot_angles;        // xy = spot angles, zw = padding
+        struct LightData {
+            Vec3 position;
+            int type;
+            Vec3 direction;
+            float intensity;
+            Vec3 color;
+            float range;
+            Vec2 spot_angles;
+            Vec2 padding;
         };
         
         std::vector<LightData> light_data;
@@ -302,33 +284,28 @@ void RayTracer::upload_scene_data_(const Scene& scene) {
         
         for (const auto& light : lights) {
             LightData data;
-            data.position_type = Vec4(light->get_position(), static_cast<float>(light->get_type()));
-            data.direction_intensity = Vec4(light->get_direction(), light->get_intensity());
-            data.color_range = Vec4(light->get_color(), light->get_range());
-            data.spot_angles = Vec4(light->get_inner_angle(), light->get_outer_angle(), 0.0f, 0.0f);
+            data.position = light->get_position();
+            data.type = static_cast<int>(light->get_type());
+            data.direction = light->get_direction();
+            data.intensity = light->get_intensity();
+            data.color = light->get_color();
+            data.range = light->get_range();
+            data.spot_angles = Vec2(light->get_inner_angle(), light->get_outer_angle());
             light_data.push_back(data);
         }
-        
-        Logger::info("LightData size: " + std::to_string(sizeof(LightData)) + " bytes");
         
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_buffer_);
         glBufferData(GL_SHADER_STORAGE_BUFFER,
                     light_data.size() * sizeof(LightData),
                     light_data.data(), GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, light_buffer_);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-        
-        Logger::info("Uploaded " + std::to_string(light_data.size()) + " lights to GPU");
-    } else {
-        Logger::warning("No lights to upload");
     }
 }
 
 void RayTracer::bind_gbuffer_(const GBuffer& gbuffer) {
-    glBindImageTexture(GBUFFER_POSITION, gbuffer.get_texture(GBUFFER_POSITION), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(GBUFFER_NORMAL, gbuffer.get_texture(GBUFFER_NORMAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(GBUFFER_ALBEDO, gbuffer.get_texture(GBUFFER_ALBEDO), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
-	glBindImageTexture(GBUFFER_MATERIAL_ID, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);
+    glBindImageTexture(0, gbuffer.get_texture(GBUFFER_POSITION), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(1, gbuffer.get_texture(GBUFFER_NORMAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(2, gbuffer.get_texture(GBUFFER_ALBEDO), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
 }
 
 void RayTracer::set_compute_shader(const Shader& shader) {

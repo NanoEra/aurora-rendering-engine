@@ -12,11 +12,14 @@ constexpr int MAX_RAY_DEPTH = 8;
 /// @brief Default samples per pixel for ray tracing
 constexpr int DEFAULT_SPP = 1;
 
-/// @brief G-Buffer attachment indices
-constexpr int GBUFFER_POSITION = 0;
-constexpr int GBUFFER_NORMAL = 1;
-constexpr int GBUFFER_ALBEDO = 2;
-constexpr int GBUFFER_COUNT = 3;
+/// @brief G-Buffer texture types
+enum GBufferTextureType {
+    GBUFFER_POSITION = 0,
+    GBUFFER_NORMAL = 1,
+    GBUFFER_ALBEDO = 2,
+    GBUFFER_MATERIAL_ID = 3,
+    GBUFFER_TEXTURE_COUNT = 4
+};
 
 /// @brief Compute shader work group size
 constexpr int COMPUTE_GROUP_SIZE_X = 16;

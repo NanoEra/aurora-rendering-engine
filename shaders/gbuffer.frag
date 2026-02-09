@@ -16,7 +16,7 @@ in VS_OUT {
 layout(location = 0) out vec4 g_position;
 layout(location = 1) out vec4 g_normal;
 layout(location = 2) out vec4 g_albedo;
-layout(location = 3) out vec4 g_material;
+layout(location = 3) out uvec4 g_material_id;
 
 // Material uniforms
 uniform vec3 u_albedo;
@@ -24,7 +24,7 @@ uniform float u_metallic;
 uniform float u_roughness;
 uniform float u_ior;
 uniform vec3 u_emission;
-uniform uint u_material_type;
+uniform uint u_material_id;
 
 uniform bool u_has_albedo_map;
 uniform sampler2D u_albedo_map;
@@ -44,6 +44,6 @@ void main() {
     }
     g_albedo = vec4(albedo, 1.0);
     
-    // Material properties
-    g_material = vec4(u_metallic, u_roughness, u_ior, float(u_material_type));
+	// Material properties
+    g_material_id = uvec4(u_material_id, 0u, 0u, 0u);
 }

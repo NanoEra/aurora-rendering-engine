@@ -1,4 +1,5 @@
 #include "core/gbuffer.h"
+#include "basic/constants.h"
 #include "utils/logger.h"
 #include <glad/glad.h>
 
@@ -10,7 +11,7 @@ GBuffer::GBuffer(uint width, uint height)
     , fbo_(INVALID_HANDLE)
     , depth_texture_(INVALID_HANDLE)
     , initialized_(false) {
-    for (int i = 0; i < GBUFFER_COUNT; ++i) {
+    for (int i = 0; i < GBUFFER_TEXTURE_COUNT; ++i) {
         textures_[i] = INVALID_HANDLE;
     }
 }
@@ -33,32 +34,30 @@ bool GBuffer::initialize() {
     textures_[GBUFFER_POSITION] = create_texture_(GL_RGBA32F, GL_RGBA, GL_FLOAT);
     textures_[GBUFFER_NORMAL] = create_texture_(GL_RGBA32F, GL_RGBA, GL_FLOAT);
     textures_[GBUFFER_ALBEDO] = create_texture_(GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+    textures_[GBUFFER_MATERIAL_ID] = create_texture_(GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT);
     
     // Attach textures to framebuffer
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_POSITION,
-                          GL_TEXTURE_2D, textures_[GBUFFER_POSITION], 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_NORMAL,
-                          GL_TEXTURE_2D, textures_[GBUFFER_NORMAL], 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_ALBEDO,
-                          GL_TEXTURE_2D, textures_[GBUFFER_ALBEDO], 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_POSITION, GL_TEXTURE_2D, textures_[GBUFFER_POSITION], 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_NORMAL, GL_TEXTURE_2D, textures_[GBUFFER_NORMAL], 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_ALBEDO, GL_TEXTURE_2D, textures_[GBUFFER_ALBEDO], 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_MATERIAL_ID, GL_TEXTURE_2D, textures_[GBUFFER_MATERIAL_ID], 0);
     
     // Create depth texture
     glGenTextures(1, &depth_texture_);
     glBindTexture(GL_TEXTURE_2D, depth_texture_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width_, height_, 0,
-                GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width_, height_, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
-                          GL_TEXTURE_2D, depth_texture_, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, depth_texture_, 0);
     
     // Set draw buffers
-    GLenum draw_buffers[GBUFFER_COUNT] = {
+    GLenum draw_buffers[GBUFFER_TEXTURE_COUNT] = {
         GL_COLOR_ATTACHMENT0 + GBUFFER_POSITION,
         GL_COLOR_ATTACHMENT0 + GBUFFER_NORMAL,
-        GL_COLOR_ATTACHMENT0 + GBUFFER_ALBEDO
+        GL_COLOR_ATTACHMENT0 + GBUFFER_ALBEDO,
+		GL_COLOR_ATTACHMENT0 + GBUFFER_MATERIAL_ID
     };
-    glDrawBuffers(GBUFFER_COUNT, draw_buffers);
+    glDrawBuffers(GBUFFER_TEXTURE_COUNT, draw_buffers);
     
     // Check framebuffer completeness
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
@@ -82,7 +81,7 @@ void GBuffer::release() {
         fbo_ = INVALID_HANDLE;
     }
     
-    for (int i = 0; i < GBUFFER_COUNT; ++i) {
+    for (int i = 0; i < GBUFFER_TEXTURE_COUNT; ++i) {
         if (textures_[i] != INVALID_HANDLE) {
             glDeleteTextures(1, &textures_[i]);
             textures_[i] = INVALID_HANDLE;
@@ -194,7 +193,7 @@ void GBuffer::resize(uint width, uint height) {
 }
 
 TextureHandle GBuffer::get_texture(int index) const {
-    if (index < 0 || index >= GBUFFER_COUNT) {
+    if (index < 0 || index >= GBUFFER_TEXTURE_COUNT) {
         Logger::error("Invalid G-Buffer texture index");
         return INVALID_HANDLE;
     }

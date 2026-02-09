@@ -19,27 +19,65 @@
 #define LIGHT_POINT 1
 #define LIGHT_SPOT 2
 
-// Structures
+// Material structure - 使用 vec4 确保对齐
 struct Material {
-    vec3 albedo;
-    float metallic;
-    vec3 emission;
-    float roughness;
+    vec4 albedo_metallic;      // xyz = albedo, w = metallic
+    vec4 emission_roughness;   // xyz = emission, w = roughness
     int type;
     float ior;
-    vec2 padding;
+    float padding1;
+    float padding2;
 };
 
+// Light structure - 使用 vec4 确保对齐
 struct Light {
-    vec3 position;
-    int type;
-    vec3 direction;
-    float intensity;
-    vec3 color;
-    float range;
-    vec2 spot_angles; // inner, outer
-    vec2 padding;
+    vec4 position_type;        // xyz = position, w = type
+    vec4 direction_intensity;  // xyz = direction, w = intensity
+    vec4 color_range;          // xyz = color, w = range
+    vec4 spot_angles;          // xy = spot angles, zw = padding
 };
+
+// 辅助函数：从 Material 获取属性
+vec3 get_material_albedo(Material mat) {
+    return mat.albedo_metallic.xyz;
+}
+
+float get_material_metallic(Material mat) {
+    return mat.albedo_metallic.w;
+}
+
+vec3 get_material_emission(Material mat) {
+    return mat.emission_roughness.xyz;
+}
+
+float get_material_roughness(Material mat) {
+    return mat.emission_roughness.w;
+}
+
+// 辅助函数：从 Light 获取属性
+vec3 get_light_position(Light light) {
+    return light.position_type.xyz;
+}
+
+int get_light_type(Light light) {
+    return int(light.position_type.w);
+}
+
+vec3 get_light_direction(Light light) {
+    return light.direction_intensity.xyz;
+}
+
+float get_light_intensity(Light light) {
+    return light.direction_intensity.w;
+}
+
+vec3 get_light_color(Light light) {
+    return light.color_range.xyz;
+}
+
+float get_light_range(Light light) {
+    return light.color_range.w;
+}
 
 struct Ray {
     vec3 origin;
@@ -153,10 +191,11 @@ layout(local_size_x = 16, local_size_y = 16) in;
 layout(binding = 0, rgba32f) uniform readonly image2D g_position;
 layout(binding = 1, rgba32f) uniform readonly image2D g_normal;
 layout(binding = 2, rgba8) uniform readonly image2D g_albedo;
+layout(binding = 3, r32ui) uniform readonly uimage2D g_material_id;
 
 // Output
-layout(binding = 3, rgba32f) uniform image2D output_image;
-layout(binding = 4, rgba32f) uniform image2D accumulation_image;
+layout(binding = 4, rgba32f) uniform image2D output_image;
+layout(binding = 5, rgba32f) uniform image2D accumulation_image;
 
 // Scene data
 layout(std430, binding = 0) readonly buffer MaterialBuffer {
@@ -182,21 +221,35 @@ vec3 evaluate_direct_lighting(vec3 position, vec3 normal, vec3 view_dir,
                               Material material, inout uint seed) {
     vec3 direct_light = vec3(0.0);
     
+    // 获取材质属性
+    vec3 mat_albedo = get_material_albedo(material);
+    float mat_metallic = get_material_metallic(material);
+    float mat_roughness = get_material_roughness(material);
+    
     for (uint i = 0u; i < u_light_count; i++) {
         Light light = lights[i];
+        
+        // 获取光源属性
+        vec3 light_pos = get_light_position(light);
+        int light_type = get_light_type(light);
+        vec3 light_dir_raw = get_light_direction(light);
+        float light_intensity = get_light_intensity(light);
+        vec3 light_color = get_light_color(light);
+        float light_range = get_light_range(light);
+        
         vec3 light_dir;
         float light_distance;
         float attenuation = 1.0;
         
-        if (light.type == LIGHT_POINT) {
-            vec3 to_light = light.position - position;
+        if (light_type == LIGHT_POINT) {
+            vec3 to_light = light_pos - position;
             light_distance = length(to_light);
             light_dir = to_light / light_distance;
             attenuation = 1.0 / max(light_distance * light_distance, 0.01);
             
-            if (light_distance > light.range) continue;
-        } else if (light.type == LIGHT_DIRECTIONAL) {
-            light_dir = normalize(-light.direction);
+            if (light_distance > light_range) continue;
+        } else if (light_type == LIGHT_DIRECTIONAL) {
+            light_dir = normalize(-light_dir_raw);
             light_distance = MAX_FLOAT;
         } else {
             continue;
@@ -209,20 +262,20 @@ vec3 evaluate_direct_lighting(vec3 position, vec3 normal, vec3 view_dir,
             float NdotV = max(dot(normal, view_dir), 0.0);
             
             // PBR lighting
-            vec3 F0 = mix(vec3(0.04), material.albedo, material.metallic);
+            vec3 F0 = mix(vec3(0.04), mat_albedo, mat_metallic);
             vec3 F = fresnel_schlick(max(dot(H, view_dir), 0.0), F0);
-            float D = distribution_ggx(normal, H, max(material.roughness, 0.04));
-            float G = geometry_smith(normal, view_dir, light_dir, material.roughness);
+            float D = distribution_ggx(normal, H, max(mat_roughness, 0.04));
+            float G = geometry_smith(normal, view_dir, light_dir, mat_roughness);
             
             vec3 numerator = D * G * F;
             float denominator = 4.0 * NdotV * NdotL + EPSILON;
             vec3 specular = numerator / denominator;
             
             vec3 kS = F;
-            vec3 kD = (vec3(1.0) - kS) * (1.0 - material.metallic);
+            vec3 kD = (vec3(1.0) - kS) * (1.0 - mat_metallic);
             
-            vec3 radiance = light.color * light.intensity * attenuation;
-            direct_light += (kD * material.albedo * INV_PI + specular) * radiance * NdotL;
+            vec3 radiance = light_color * light_intensity * attenuation;
+            direct_light += (kD * mat_albedo * INV_PI + specular) * radiance * NdotL;
         }
     }
     
@@ -237,10 +290,26 @@ void main() {
         return;
     }
     
+    // ============ DEBUG MODE 6: 显示材质Metallic ============
+    /*
+    {
+        uint mat_id = imageLoad(g_material_id, pixel_coords).r;
+        if (imageLoad(g_position, pixel_coords).w > 0.5 && mat_id < uint(materials.length())) {
+            Material mat = materials[mat_id];
+            float metallic_vis = get_material_metallic(mat);
+            imageStore(output_image, pixel_coords, vec4(metallic_vis, metallic_vis, metallic_vis, 1.0));
+        } else {
+            imageStore(output_image, pixel_coords, vec4(0.0, 0.0, 0.0, 1.0));
+        }
+        return;
+    }
+    */
+    
     // Read G-Buffer
     vec4 position_data = imageLoad(g_position, pixel_coords);
     vec4 normal_data = imageLoad(g_normal, pixel_coords);
     vec4 albedo_data = imageLoad(g_albedo, pixel_coords);
+    uint material_id = imageLoad(g_material_id, pixel_coords).r;
     
     // Background
     if (position_data.w < 0.5) {
@@ -254,11 +323,6 @@ void main() {
     vec3 normal = normalize(normal_data.xyz);
     vec3 albedo = albedo_data.rgb;
     
-    // 关键修复：从G-Buffer的alpha通道读取material_id
-    // 注意：albedo_data是从RGBA8纹理读取的，alpha值范围是[0,1]
-    // 我们需要将其转换回整数ID
-    uint material_id = uint(albedo_data.a * 255.0 + 0.5);
-    
     // Initialize random seed
     uint seed = uint(pixel_coords.x) + uint(pixel_coords.y) * uint(image_size.x) + u_frame_count * 719393u;
     
@@ -269,20 +333,17 @@ void main() {
     uint mat_count = uint(materials.length());
     
     if (material_id < mat_count) {
-        // 从SSBO读取材质
         material = materials[material_id];
     } else {
-        // 使用G-Buffer中的albedo作为fallback
-        material.albedo = albedo;
-        material.metallic = 0.0;
-        material.roughness = 0.5;
-        material.emission = vec3(0.0);
+        // Fallback - 创建默认材质
+        material.albedo_metallic = vec4(albedo, 0.0);
+        material.emission_roughness = vec4(0.0, 0.0, 0.0, 0.5);
         material.type = MATERIAL_DIFFUSE;
         material.ior = 1.5;
     }
     
     // Add emission
-    color += material.emission;
+    color += get_material_emission(material);
     
     // Direct lighting
     vec3 view_dir = normalize(u_camera_position - position);
@@ -292,7 +353,7 @@ void main() {
     }
     
     // Ambient lighting
-    color += material.albedo * 0.05;
+    color += get_material_albedo(material) * 0.05;
     
     // Clamp
     color = clamp(color, vec3(0.0), vec3(10.0));
@@ -307,197 +368,3 @@ void main() {
     imageStore(accumulation_image, pixel_coords, vec4(color, 1.0));
     imageStore(output_image, pixel_coords, vec4(color, 1.0));
 }
-
-// layout(local_size_x = 16, local_size_y = 16) in;
-//
-// // G-Buffer inputs
-// layout(binding = 0, rgba32f) uniform readonly image2D g_position;
-// layout(binding = 1, rgba32f) uniform readonly image2D g_normal;
-// layout(binding = 2, rgba8) uniform readonly image2D g_albedo;
-//
-// // Output
-// layout(binding = 3, rgba32f) uniform image2D output_image;
-// layout(binding = 4, rgba32f) uniform image2D accumulation_image;
-//
-// // Scene data
-// layout(std430, binding = 0) readonly buffer MaterialBuffer {
-//     Material materials[];
-// };
-//
-// layout(std430, binding = 1) readonly buffer LightBuffer {
-//     Light lights[];
-// };
-//
-// // Uniforms
-// uniform uint u_frame_count;
-// uniform uint u_samples_per_pixel;
-// uniform uint u_max_depth;
-// uniform uint u_light_count;
-// uniform vec3 u_camera_position;
-// uniform mat4 u_inv_view_projection;
-// uniform bool u_enable_accumulation;
-// uniform bool u_use_bvh;
-//
-// // Cosine-weighted hemisphere sampling
-// vec3 cosine_weighted_hemisphere(vec3 normal, inout uint seed) {
-//     vec2 r = random_vec2(seed);
-//     float r1 = 2.0 * PI * r.x;
-//     float r2 = r.y;
-//     float r2s = sqrt(r2);
-//
-//     vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
-//     vec3 tangent = normalize(cross(up, normal));
-//     vec3 bitangent = cross(normal, tangent);
-//
-//     vec3 dir = tangent * cos(r1) * r2s + bitangent * sin(r1) * r2s + normal * sqrt(1.0 - r2);
-//     return normalize(dir);
-// }
-//
-// // Evaluate direct lighting
-// vec3 evaluate_direct_lighting(vec3 position, vec3 normal, vec3 view_dir, 
-//                               Material material, inout uint seed) {
-//     vec3 direct_light = vec3(0.0);
-//
-//     for (uint i = 0u; i < u_light_count; i++) {
-//         Light light = lights[i];
-//         vec3 light_dir;
-//         float light_distance;
-//         float attenuation = 1.0;
-//
-//         if (light.type == LIGHT_POINT) {
-//             vec3 to_light = light.position - position;
-//             light_distance = length(to_light);
-//             light_dir = to_light / light_distance;
-//             attenuation = 1.0 / max(light_distance * light_distance, 0.01);
-//
-//             if (light_distance > light.range) continue;
-//         } else if (light.type == LIGHT_DIRECTIONAL) {
-//             light_dir = normalize(-light.direction);
-//             light_distance = MAX_FLOAT;
-//         } else {
-//             continue;
-//         }
-//
-//         float NdotL = max(dot(normal, light_dir), 0.0);
-//
-//         if (NdotL > 0.0) {
-//             vec3 H = normalize(view_dir + light_dir);
-//             float NdotV = max(dot(normal, view_dir), 0.0);
-//
-//             // PBR lighting
-//             vec3 F0 = mix(vec3(0.04), material.albedo, material.metallic);
-//             vec3 F = fresnel_schlick(max(dot(H, view_dir), 0.0), F0);
-//             float D = distribution_ggx(normal, H, max(material.roughness, 0.04));
-//             float G = geometry_smith(normal, view_dir, light_dir, material.roughness);
-//
-//             vec3 numerator = D * G * F;
-//             float denominator = 4.0 * NdotV * NdotL + EPSILON;
-//             vec3 specular = numerator / denominator;
-//
-//             vec3 kS = F;
-//             vec3 kD = (vec3(1.0) - kS) * (1.0 - material.metallic);
-//
-//             vec3 radiance = light.color * light.intensity * attenuation;
-//             direct_light += (kD * material.albedo * INV_PI + specular) * radiance * NdotL;
-//         }
-//     }
-//
-//     return direct_light;
-// }
-//
-// // Trace indirect lighting (simple path tracing)
-// vec3 trace_indirect(vec3 position, vec3 normal, Material material, inout uint seed) {
-//     vec3 color = vec3(0.0);
-//
-//     // Sample random direction
-//     vec3 ray_dir = cosine_weighted_hemisphere(normal, seed);
-//
-//     // Sky color based on direction
-//     float t = 0.5 * (ray_dir.y + 1.0);
-//     vec3 sky_color = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), t) * 0.2;
-//
-//     color = sky_color;
-//
-//     return color;
-// }
-//
-// void main() {
-//     ivec2 pixel_coords = ivec2(gl_GlobalInvocationID.xy);
-//     ivec2 image_size = imageSize(output_image);
-//
-//     if (pixel_coords.x >= image_size.x || pixel_coords.y >= image_size.y) {
-//         return;
-//     }
-//
-//     // Read G-Buffer
-//     vec4 position_data = imageLoad(g_position, pixel_coords);
-//     vec4 normal_data = imageLoad(g_normal, pixel_coords);
-//     vec4 albedo_data = imageLoad(g_albedo, pixel_coords);
-//
-//     // Check if this pixel has valid geometry
-//     if (position_data.w < 0.5) {
-//         vec3 background = vec3(0.1, 0.1, 0.15);
-//         imageStore(output_image, pixel_coords, vec4(background, 1.0));
-//         imageStore(accumulation_image, pixel_coords, vec4(background, 1.0));
-//         return;
-//     }
-//
-//     vec3 position = position_data.xyz;
-//     vec3 normal = normalize(normal_data.xyz);
-//     vec3 albedo = albedo_data.rgb;
-//     uint material_id = floatBitsToUint(albedo_data.a);
-//
-//     if (material_id >= 1000u) {
-//         material_id = 0u;
-//     }
-//
-//     // Initialize random seed
-//     uint seed = uint(pixel_coords.x) + uint(pixel_coords.y) * uint(image_size.x) + u_frame_count * 719393u;
-//
-//     vec3 color = vec3(0.0);
-//
-//     // Get material
-//     Material material;
-//     if (material_id < uint(materials.length())) {
-//         material = materials[material_id];
-//     } else {
-//         material.albedo = albedo;
-//         material.metallic = 0.0;
-//         material.roughness = 0.5;
-//         material.emission = vec3(0.0);
-//         material.type = MATERIAL_DIFFUSE;
-//         material.ior = 1.5;
-//     }
-//
-//     // Add emission
-//     color += material.emission;
-//
-//     // Direct lighting
-//     vec3 view_dir = normalize(u_camera_position - position);
-//
-//     if (u_light_count > 0u) {
-//         color += evaluate_direct_lighting(position, normal, view_dir, material, seed);
-//     }
-//
-//     // Indirect lighting (path tracing) - THIS ADDS NOISE
-//     for (uint samp_idx = 0u; samp_idx < u_samples_per_pixel; samp_idx++) {  // 修复: sample -> samp_idx
-//         vec3 indirect = trace_indirect(position, normal, material, seed);
-//         color += indirect * material.albedo * INV_PI;
-//     }
-//
-//     // Ambient
-//     color += material.albedo * 0.02;
-//
-//     // Clamp
-//     color = clamp(color, vec3(0.0), vec3(100.0));
-//
-//     // Accumulation for denoising
-//     if (u_enable_accumulation && u_frame_count > 0u) {
-//         vec3 accumulated = imageLoad(accumulation_image, pixel_coords).rgb;
-//         float weight = 1.0 / float(u_frame_count + 1u);
-//         color = mix(accumulated, color, weight);
-//     }
-//
-//     imageStore(accumulation_image, pixel_coords, vec4(color, 1.0));
-//     imageStore(output_image, pixel_coords, vec4(color, 1.0));
-// }

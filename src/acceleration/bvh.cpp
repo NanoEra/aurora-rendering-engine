@@ -3,6 +3,7 @@
  * @brief Implementation of BVH class (optimized version)
  */
 
+#include <stack>
 #include <algorithm>
 #include <are/acceleration/bvh.h>
 #include <are/core/logger.h>
@@ -70,6 +71,53 @@ bool BVH::intersect_any(const Ray &ray, Real t_max) const {
 	}
 
 	return intersect_any_iterative(ray, t_max);
+}
+
+bool BVH::intersect_any(const Ray& ray, Real t_max, uint32_t ignore_triangle_index) const {
+    ARE_PROFILE_FUNCTION();
+
+    if (!is_built()) {
+        return false;
+    }
+
+    // iterative traversal is safer than recursion for deep trees, but keep style consistent
+    std::stack<uint32_t> stack;
+    stack.push(root_index_);
+
+    while (!stack.empty()) {
+        uint32_t node_index = stack.top();
+        stack.pop();
+
+        const BVHNode& node = nodes_[node_index];
+
+        Real t0, t1;
+        if (!node.bounds_.intersect_ray(ray, t0, t1)) {
+            continue;
+        }
+        if (t0 > t_max) {
+            continue;
+        }
+
+        if (node.is_leaf()) {
+            for (uint32_t i = 0; i < node.primitive_count_; ++i) {
+                uint32_t prim_idx = primitive_indices_[node.first_primitive_ + i];
+                if (prim_idx == ignore_triangle_index) {
+                    continue;
+                }
+                if (prim_idx >= triangles_.size()) {
+                    continue;
+                }
+                if (triangles_[prim_idx].intersect_fast(ray, t_max)) {
+                    return true;
+                }
+            }
+        } else {
+            stack.push(node.left_child_);
+            stack.push(node.right_child_);
+        }
+    }
+
+    return false;
 }
 
 size_t BVH::get_memory_usage() const {

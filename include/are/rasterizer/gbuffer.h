@@ -14,8 +14,14 @@ namespace are {
 /**
  * @class GBuffer
  * @brief G-Buffer for deferred rendering
- * 
- * Contains multiple render targets for position, normal, albedo, etc.
+ *
+ * Attachment layout:
+ * 0: position (RGB16F)
+ * 1: normal (RGB16F)
+ * 2: albedo+metallic (RGBA8)
+ * 3: roughness+ao (RG8)
+ * 4: primitive id (R32UI)
+ * Depth: depth texture (DEPTH_COMPONENT24)
  */
 class GBuffer {
 public:
@@ -55,7 +61,7 @@ public:
 
     /**
      * @brief Bind texture for reading
-     * @param index Texture index (0=position, 1=normal, 2=albedo, etc.)
+     * @param index Texture index
      * @param texture_unit Texture unit to bind to
      */
     void bind_texture(int index, int texture_unit);
@@ -66,6 +72,7 @@ public:
     uint32_t get_albedo_texture() const { return albedo_texture_; }
     uint32_t get_material_texture() const { return material_texture_; }
     uint32_t get_depth_texture() const { return depth_texture_; }
+    uint32_t get_primitive_id_texture() const { return primitive_id_texture_; }
 
     // Dimensions
     int get_width() const { return width_; }
@@ -73,6 +80,15 @@ public:
 
     /**
      * @brief Read pixel data from G-Buffer
+     *
+     * Index mapping:
+     * - 0: position (RGB16F) -> GL_RGB/GL_FLOAT
+     * - 1: normal (RGB16F) -> GL_RGB/GL_FLOAT
+     * - 2: albedo_metallic (RGBA8) -> GL_RGBA/GL_UNSIGNED_BYTE
+     * - 3: material (RG8) -> GL_RG/GL_UNSIGNED_BYTE
+     * - 4: depth (DEPTH_COMPONENT24) -> GL_DEPTH_COMPONENT/GL_FLOAT
+     * - 5: primitive id (R32UI) -> GL_RED_INTEGER/GL_UNSIGNED_INT
+     *
      * @param index Buffer index
      * @param data Output data pointer
      */
@@ -84,17 +100,17 @@ private:
     void create_framebuffer();
 
     uint32_t fbo_;                        ///< Framebuffer object
-    uint32_t rbo_depth_;                  ///< Depth renderbuffer
+    uint32_t rbo_depth_;                  ///< Legacy depth renderbuffer (unused)
 
-    // G-Buffer textures
-    uint32_t position_texture_;           ///< World position (RGB16F)
-    uint32_t normal_texture_;             ///< World normal (RGB16F)
-    uint32_t albedo_texture_;             ///< Albedo + Metallic (RGBA8)
-    uint32_t material_texture_;           ///< Roughness + AO (RG8)
-    uint32_t depth_texture_;              ///< Depth (R32F)
+    uint32_t position_texture_;
+    uint32_t normal_texture_;
+    uint32_t albedo_texture_;
+    uint32_t material_texture_;
+    uint32_t depth_texture_;
+    uint32_t primitive_id_texture_;
 
-    int width_;                           ///< Buffer width
-    int height_;                          ///< Buffer height
+    int width_;
+    int height_;
 };
 
 } // namespace are

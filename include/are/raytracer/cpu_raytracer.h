@@ -89,7 +89,7 @@ private:
      * @param max_distance Maximum distance
      * @return true if in shadow
      */
-    bool is_in_shadow(const Vec3& origin, const Vec3& direction, Real max_distance);
+	bool is_in_shadow(const Vec3& origin, const Vec3& direction, Real max_distance, uint32_t ignore_triangle);
 
     const BVH* bvh_;                      ///< BVH reference
     const SceneManager* scene_;           ///< Scene reference

@@ -155,8 +155,12 @@ void ShaderProgram::use() const {
     }
 }
 
+void ShaderProgram::set_uniform(const std::string& name, uint32_t value) {
+    glUniform1ui(get_uniform_location(name), value);
+}
+
 void ShaderProgram::set_uniform(const std::string& name, int value) {
-    glUniform1i(get_uniform_location(name), value);
+    glUniform1ui(get_uniform_location(name), value);
 }
 
 void ShaderProgram::set_uniform(const std::string& name, float value) {

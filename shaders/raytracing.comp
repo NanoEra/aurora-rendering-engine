@@ -1,0 +1,503 @@
+#version 430 core
+
+// Constants
+#define PI 3.14159265359
+#define INV_PI 0.31830988618
+#define EPSILON 1e-4
+#define MAX_FLOAT 3.402823466e38
+#define MAX_RAY_DEPTH 8
+#define MAX_LIGHTS 16
+
+// Material types
+#define MATERIAL_DIFFUSE 0
+#define MATERIAL_METAL 1
+#define MATERIAL_DIELECTRIC 2
+#define MATERIAL_EMISSIVE 3
+
+// Light types
+#define LIGHT_DIRECTIONAL 0
+#define LIGHT_POINT 1
+#define LIGHT_SPOT 2
+
+// Structures
+struct Material {
+    vec3 albedo;
+    float metallic;
+    vec3 emission;
+    float roughness;
+    int type;
+    float ior;
+    vec2 padding;
+};
+
+struct Light {
+    vec3 position;
+    int type;
+    vec3 direction;
+    float intensity;
+    vec3 color;
+    float range;
+    vec2 spot_angles; // inner, outer
+    vec2 padding;
+};
+
+struct Ray {
+    vec3 origin;
+    vec3 direction;
+};
+
+struct HitInfo {
+    bool hit;
+    float t;
+    vec3 position;
+    vec3 normal;
+    vec2 texcoord;
+    uint material_id;
+};
+
+// Utility functions
+float saturate(float x) {
+    return clamp(x, 0.0, 1.0);
+}
+
+vec3 saturate(vec3 x) {
+    return clamp(x, vec3(0.0), vec3(1.0));
+}
+
+// Random number generation (PCG Hash)
+uint pcg_hash(uint seed) {
+    uint state = seed * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+float random_float(inout uint seed) {
+    seed = pcg_hash(seed);
+    return float(seed) / 4294967296.0;
+}
+
+vec2 random_vec2(inout uint seed) {
+    return vec2(random_float(seed), random_float(seed));
+}
+
+vec3 random_vec3(inout uint seed) {
+    return vec3(random_float(seed), random_float(seed), random_float(seed));
+}
+
+// Random direction in hemisphere
+vec3 random_hemisphere_direction(vec3 normal, inout uint seed) {
+    float z = random_float(seed);
+    float r = sqrt(max(0.0, 1.0 - z * z));
+    float phi = 2.0 * PI * random_float(seed);
+    
+    vec3 dir = vec3(r * cos(phi), r * sin(phi), z);
+    
+    // Create coordinate system
+    vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, normal));
+    vec3 bitangent = cross(normal, tangent);
+    
+    return normalize(tangent * dir.x + bitangent * dir.y + normal * dir.z);
+}
+
+// Cosine-weighted hemisphere sampling
+// vec3 cosine_weighted_hemisphere(vec3 normal, inout uint seed) {
+//     vec2 r = random_vec2(seed);
+//     float r1 = 2.0 * PI * r.x;
+//     float r2 = r.y;
+//     float r2s = sqrt(r2);
+//
+//     vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+//     vec3 tangent = normalize(cross(up, normal));
+//     vec3 bitangent = cross(normal, tangent);
+//
+//     vec3 dir = tangent * cos(r1) * r2s + bitangent * sin(r1) * r2s + normal * sqrt(1.0 - r2);
+//     return normalize(dir);
+// }
+
+// Schlick's approximation for Fresnel
+vec3 fresnel_schlick(float cos_theta, vec3 f0) {
+    return f0 + (1.0 - f0) * pow(1.0 - cos_theta, 5.0);
+}
+
+// GGX distribution
+float distribution_ggx(vec3 N, vec3 H, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    
+    float nom = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+    
+    return nom / max(denom, EPSILON);
+}
+
+// Smith's geometry function
+float geometry_smith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    
+    float ggx1 = NdotV / (NdotV * (1.0 - k) + k);
+    float ggx2 = NdotL / (NdotL * (1.0 - k) + k);
+    
+    return ggx1 * ggx2;
+}
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// G-Buffer inputs
+layout(binding = 0, rgba32f) uniform readonly image2D g_position;
+layout(binding = 1, rgba32f) uniform readonly image2D g_normal;
+layout(binding = 2, rgba8) uniform readonly image2D g_albedo;
+
+// Output
+layout(binding = 3, rgba32f) uniform image2D output_image;
+layout(binding = 4, rgba32f) uniform image2D accumulation_image;
+
+// Scene data
+layout(std430, binding = 0) readonly buffer MaterialBuffer {
+    Material materials[];
+};
+
+layout(std430, binding = 1) readonly buffer LightBuffer {
+    Light lights[];
+};
+
+// Uniforms
+uniform uint u_frame_count;
+uniform uint u_samples_per_pixel;
+uniform uint u_max_depth;
+uniform uint u_light_count;
+uniform vec3 u_camera_position;
+uniform mat4 u_inv_view_projection;
+uniform bool u_enable_accumulation;
+uniform bool u_use_bvh;
+
+// Evaluate direct lighting
+vec3 evaluate_direct_lighting(vec3 position, vec3 normal, vec3 view_dir, 
+                              Material material, inout uint seed) {
+    vec3 direct_light = vec3(0.0);
+    
+    for (uint i = 0u; i < u_light_count; i++) {
+        Light light = lights[i];
+        vec3 light_dir;
+        float light_distance;
+        float attenuation = 1.0;
+        
+        if (light.type == LIGHT_POINT) {
+            vec3 to_light = light.position - position;
+            light_distance = length(to_light);
+            light_dir = to_light / light_distance;
+            attenuation = 1.0 / max(light_distance * light_distance, 0.01);
+            
+            if (light_distance > light.range) continue;
+        } else if (light.type == LIGHT_DIRECTIONAL) {
+            light_dir = normalize(-light.direction);
+            light_distance = MAX_FLOAT;
+        } else {
+            continue;
+        }
+        
+        float NdotL = max(dot(normal, light_dir), 0.0);
+        
+        if (NdotL > 0.0) {
+            vec3 H = normalize(view_dir + light_dir);
+            float NdotV = max(dot(normal, view_dir), 0.0);
+            
+            // PBR lighting
+            vec3 F0 = mix(vec3(0.04), material.albedo, material.metallic);
+            vec3 F = fresnel_schlick(max(dot(H, view_dir), 0.0), F0);
+            float D = distribution_ggx(normal, H, max(material.roughness, 0.04));
+            float G = geometry_smith(normal, view_dir, light_dir, material.roughness);
+            
+            vec3 numerator = D * G * F;
+            float denominator = 4.0 * NdotV * NdotL + EPSILON;
+            vec3 specular = numerator / denominator;
+            
+            vec3 kS = F;
+            vec3 kD = (vec3(1.0) - kS) * (1.0 - material.metallic);
+            
+            vec3 radiance = light.color * light.intensity * attenuation;
+            direct_light += (kD * material.albedo * INV_PI + specular) * radiance * NdotL;
+        }
+    }
+    
+    return direct_light;
+}
+
+void main() {
+    ivec2 pixel_coords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 image_size = imageSize(output_image);
+    
+    if (pixel_coords.x >= image_size.x || pixel_coords.y >= image_size.y) {
+        return;
+    }
+    
+    // Read G-Buffer
+    vec4 position_data = imageLoad(g_position, pixel_coords);
+    vec4 normal_data = imageLoad(g_normal, pixel_coords);
+    vec4 albedo_data = imageLoad(g_albedo, pixel_coords);
+    
+    // Background
+    if (position_data.w < 0.5) {
+        vec3 background = vec3(0.1, 0.1, 0.15);
+        imageStore(output_image, pixel_coords, vec4(background, 1.0));
+        imageStore(accumulation_image, pixel_coords, vec4(background, 1.0));
+        return;
+    }
+    
+    vec3 position = position_data.xyz;
+    vec3 normal = normalize(normal_data.xyz);
+    vec3 albedo = albedo_data.rgb;
+    
+    // 关键修复：从G-Buffer的alpha通道读取material_id
+    // 注意：albedo_data是从RGBA8纹理读取的，alpha值范围是[0,1]
+    // 我们需要将其转换回整数ID
+    uint material_id = uint(albedo_data.a * 255.0 + 0.5);
+    
+    // Initialize random seed
+    uint seed = uint(pixel_coords.x) + uint(pixel_coords.y) * uint(image_size.x) + u_frame_count * 719393u;
+    
+    vec3 color = vec3(0.0);
+    
+    // Get material from buffer
+    Material material;
+    uint mat_count = uint(materials.length());
+    
+    if (material_id < mat_count) {
+        // 从SSBO读取材质
+        material = materials[material_id];
+    } else {
+        // 使用G-Buffer中的albedo作为fallback
+        material.albedo = albedo;
+        material.metallic = 0.0;
+        material.roughness = 0.5;
+        material.emission = vec3(0.0);
+        material.type = MATERIAL_DIFFUSE;
+        material.ior = 1.5;
+    }
+    
+    // Add emission
+    color += material.emission;
+    
+    // Direct lighting
+    vec3 view_dir = normalize(u_camera_position - position);
+    
+    if (u_light_count > 0u) {
+        color += evaluate_direct_lighting(position, normal, view_dir, material, seed);
+    }
+    
+    // Ambient lighting
+    color += material.albedo * 0.05;
+    
+    // Clamp
+    color = clamp(color, vec3(0.0), vec3(10.0));
+    
+    // Accumulation
+    if (u_enable_accumulation && u_frame_count > 0u) {
+        vec3 accumulated = imageLoad(accumulation_image, pixel_coords).rgb;
+        float weight = 1.0 / float(u_frame_count + 1u);
+        color = mix(accumulated, color, weight);
+    }
+    
+    imageStore(accumulation_image, pixel_coords, vec4(color, 1.0));
+    imageStore(output_image, pixel_coords, vec4(color, 1.0));
+}
+
+// layout(local_size_x = 16, local_size_y = 16) in;
+//
+// // G-Buffer inputs
+// layout(binding = 0, rgba32f) uniform readonly image2D g_position;
+// layout(binding = 1, rgba32f) uniform readonly image2D g_normal;
+// layout(binding = 2, rgba8) uniform readonly image2D g_albedo;
+//
+// // Output
+// layout(binding = 3, rgba32f) uniform image2D output_image;
+// layout(binding = 4, rgba32f) uniform image2D accumulation_image;
+//
+// // Scene data
+// layout(std430, binding = 0) readonly buffer MaterialBuffer {
+//     Material materials[];
+// };
+//
+// layout(std430, binding = 1) readonly buffer LightBuffer {
+//     Light lights[];
+// };
+//
+// // Uniforms
+// uniform uint u_frame_count;
+// uniform uint u_samples_per_pixel;
+// uniform uint u_max_depth;
+// uniform uint u_light_count;
+// uniform vec3 u_camera_position;
+// uniform mat4 u_inv_view_projection;
+// uniform bool u_enable_accumulation;
+// uniform bool u_use_bvh;
+//
+// // Cosine-weighted hemisphere sampling
+// vec3 cosine_weighted_hemisphere(vec3 normal, inout uint seed) {
+//     vec2 r = random_vec2(seed);
+//     float r1 = 2.0 * PI * r.x;
+//     float r2 = r.y;
+//     float r2s = sqrt(r2);
+//
+//     vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+//     vec3 tangent = normalize(cross(up, normal));
+//     vec3 bitangent = cross(normal, tangent);
+//
+//     vec3 dir = tangent * cos(r1) * r2s + bitangent * sin(r1) * r2s + normal * sqrt(1.0 - r2);
+//     return normalize(dir);
+// }
+//
+// // Evaluate direct lighting
+// vec3 evaluate_direct_lighting(vec3 position, vec3 normal, vec3 view_dir, 
+//                               Material material, inout uint seed) {
+//     vec3 direct_light = vec3(0.0);
+//
+//     for (uint i = 0u; i < u_light_count; i++) {
+//         Light light = lights[i];
+//         vec3 light_dir;
+//         float light_distance;
+//         float attenuation = 1.0;
+//
+//         if (light.type == LIGHT_POINT) {
+//             vec3 to_light = light.position - position;
+//             light_distance = length(to_light);
+//             light_dir = to_light / light_distance;
+//             attenuation = 1.0 / max(light_distance * light_distance, 0.01);
+//
+//             if (light_distance > light.range) continue;
+//         } else if (light.type == LIGHT_DIRECTIONAL) {
+//             light_dir = normalize(-light.direction);
+//             light_distance = MAX_FLOAT;
+//         } else {
+//             continue;
+//         }
+//
+//         float NdotL = max(dot(normal, light_dir), 0.0);
+//
+//         if (NdotL > 0.0) {
+//             vec3 H = normalize(view_dir + light_dir);
+//             float NdotV = max(dot(normal, view_dir), 0.0);
+//
+//             // PBR lighting
+//             vec3 F0 = mix(vec3(0.04), material.albedo, material.metallic);
+//             vec3 F = fresnel_schlick(max(dot(H, view_dir), 0.0), F0);
+//             float D = distribution_ggx(normal, H, max(material.roughness, 0.04));
+//             float G = geometry_smith(normal, view_dir, light_dir, material.roughness);
+//
+//             vec3 numerator = D * G * F;
+//             float denominator = 4.0 * NdotV * NdotL + EPSILON;
+//             vec3 specular = numerator / denominator;
+//
+//             vec3 kS = F;
+//             vec3 kD = (vec3(1.0) - kS) * (1.0 - material.metallic);
+//
+//             vec3 radiance = light.color * light.intensity * attenuation;
+//             direct_light += (kD * material.albedo * INV_PI + specular) * radiance * NdotL;
+//         }
+//     }
+//
+//     return direct_light;
+// }
+//
+// // Trace indirect lighting (simple path tracing)
+// vec3 trace_indirect(vec3 position, vec3 normal, Material material, inout uint seed) {
+//     vec3 color = vec3(0.0);
+//
+//     // Sample random direction
+//     vec3 ray_dir = cosine_weighted_hemisphere(normal, seed);
+//
+//     // Sky color based on direction
+//     float t = 0.5 * (ray_dir.y + 1.0);
+//     vec3 sky_color = mix(vec3(1.0), vec3(0.5, 0.7, 1.0), t) * 0.2;
+//
+//     color = sky_color;
+//
+//     return color;
+// }
+//
+// void main() {
+//     ivec2 pixel_coords = ivec2(gl_GlobalInvocationID.xy);
+//     ivec2 image_size = imageSize(output_image);
+//
+//     if (pixel_coords.x >= image_size.x || pixel_coords.y >= image_size.y) {
+//         return;
+//     }
+//
+//     // Read G-Buffer
+//     vec4 position_data = imageLoad(g_position, pixel_coords);
+//     vec4 normal_data = imageLoad(g_normal, pixel_coords);
+//     vec4 albedo_data = imageLoad(g_albedo, pixel_coords);
+//
+//     // Check if this pixel has valid geometry
+//     if (position_data.w < 0.5) {
+//         vec3 background = vec3(0.1, 0.1, 0.15);
+//         imageStore(output_image, pixel_coords, vec4(background, 1.0));
+//         imageStore(accumulation_image, pixel_coords, vec4(background, 1.0));
+//         return;
+//     }
+//
+//     vec3 position = position_data.xyz;
+//     vec3 normal = normalize(normal_data.xyz);
+//     vec3 albedo = albedo_data.rgb;
+//     uint material_id = floatBitsToUint(albedo_data.a);
+//
+//     if (material_id >= 1000u) {
+//         material_id = 0u;
+//     }
+//
+//     // Initialize random seed
+//     uint seed = uint(pixel_coords.x) + uint(pixel_coords.y) * uint(image_size.x) + u_frame_count * 719393u;
+//
+//     vec3 color = vec3(0.0);
+//
+//     // Get material
+//     Material material;
+//     if (material_id < uint(materials.length())) {
+//         material = materials[material_id];
+//     } else {
+//         material.albedo = albedo;
+//         material.metallic = 0.0;
+//         material.roughness = 0.5;
+//         material.emission = vec3(0.0);
+//         material.type = MATERIAL_DIFFUSE;
+//         material.ior = 1.5;
+//     }
+//
+//     // Add emission
+//     color += material.emission;
+//
+//     // Direct lighting
+//     vec3 view_dir = normalize(u_camera_position - position);
+//
+//     if (u_light_count > 0u) {
+//         color += evaluate_direct_lighting(position, normal, view_dir, material, seed);
+//     }
+//
+//     // Indirect lighting (path tracing) - THIS ADDS NOISE
+//     for (uint samp_idx = 0u; samp_idx < u_samples_per_pixel; samp_idx++) {  // 修复: sample -> samp_idx
+//         vec3 indirect = trace_indirect(position, normal, material, seed);
+//         color += indirect * material.albedo * INV_PI;
+//     }
+//
+//     // Ambient
+//     color += material.albedo * 0.02;
+//
+//     // Clamp
+//     color = clamp(color, vec3(0.0), vec3(100.0));
+//
+//     // Accumulation for denoising
+//     if (u_enable_accumulation && u_frame_count > 0u) {
+//         vec3 accumulated = imageLoad(accumulation_image, pixel_coords).rgb;
+//         float weight = 1.0 / float(u_frame_count + 1u);
+//         color = mix(accumulated, color, weight);
+//     }
+//
+//     imageStore(accumulation_image, pixel_coords, vec4(color, 1.0));
+//     imageStore(output_image, pixel_coords, vec4(color, 1.0));
+// }

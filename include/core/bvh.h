@@ -56,6 +56,24 @@ struct BVHNode {
     uint count_;       // 0 for interior node, >0 for leaf node
 };
 
+/// @brief GPU-friendly BVH node layout (std430 aligned)
+struct BVHNodeGpu {
+    Vec4 aabb_min_left_first_;  ///< xyz = aabb min, w = left_first (uint)
+    Vec4 aabb_max_count_;       ///< xyz = aabb max, w = count (uint, 0 for interior)
+};
+
+/// @brief GPU-friendly triangle layout (std430 aligned)
+struct TriangleGpu {
+    Vec4 v0_material_; ///< xyz = v0, w = material_id (uint)
+    Vec4 v1_;          ///< xyz = v1, w = reserved
+    Vec4 v2_;          ///< xyz = v2, w = reserved
+    Vec4 n0_;          ///< xyz = n0, w = reserved
+    Vec4 n1_;          ///< xyz = n1, w = reserved
+    Vec4 n2_;          ///< xyz = n2, w = reserved
+    Vec4 uv0_uv1_;     ///< xy = uv0, zw = uv1
+    Vec4 uv2_;         ///< xy = uv2, zw = reserved
+};
+
 /// @brief Bounding Volume Hierarchy for ray tracing acceleration
 class BVH {
 public:

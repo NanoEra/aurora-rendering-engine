@@ -104,15 +104,8 @@ bool ShaderManager::load_builtin_shaders_() {
         return false;
     }
     shader_cache_["gbuffer"] = gbuffer_shader_;
-    
-    // Load ray tracing compute shader
-    if (!raytracing_shader_.load_compute("shaders/raytracing.comp")) {
-        Logger::error("Failed to load ray tracing shader");
-        return false;
-    }
-    shader_cache_["raytracing"] = raytracing_shader_;
 
-	// Load ray tracing compute shader
+    // Load ray tracing compute shader
     Logger::info("Loading ray tracing compute shader...");
     if (!raytracing_shader_.load_compute("shaders/raytracing.comp")) {
         Logger::error("Failed to load ray tracing shader");
@@ -120,7 +113,7 @@ bool ShaderManager::load_builtin_shaders_() {
     }
     shader_cache_["raytracing"] = raytracing_shader_;
     Logger::info("Ray tracing shader loaded successfully");
-    
+
     return true;
 }
 

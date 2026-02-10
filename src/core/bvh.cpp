@@ -257,33 +257,62 @@ bool BVH::upload_to_gpu(Buffer& node_buffer, Buffer& triangle_buffer) {
         Logger::error("Cannot upload empty BVH to GPU");
         return false;
     }
-    
+
     // Reorder triangles according to BVH layout
     std::vector<Triangle> ordered_triangles;
     ordered_triangles.reserve(triangles_.size());
-    
     for (uint idx : triangle_indices_) {
         ordered_triangles.push_back(triangles_[idx]);
     }
-    
-    // Upload nodes
+
+    // Pack nodes to GPU layout
+    std::vector<BVHNodeGpu> node_gpu;
+    node_gpu.resize(nodes_.size());
+    for (size_t i = 0; i < nodes_.size(); ++i) {
+        const BVHNode& n = nodes_[i];
+        BVHNodeGpu g;
+        g.aabb_min_left_first_ = Vec4(n.aabb_min_, glm::uintBitsToFloat(n.left_first_));
+        g.aabb_max_count_      = Vec4(n.aabb_max_, glm::uintBitsToFloat(n.count_));
+        node_gpu[i] = g;
+    }
+
+    // Pack triangles to GPU layout
+    std::vector<TriangleGpu> tri_gpu;
+    tri_gpu.resize(ordered_triangles.size());
+    for (size_t i = 0; i < ordered_triangles.size(); ++i) {
+        const Triangle& t = ordered_triangles[i];
+
+        TriangleGpu g{};
+        g.v0_material_ = Vec4(t.v0_, glm::uintBitsToFloat(t.material_id_));
+        g.v1_          = Vec4(t.v1_, 0.0f);
+        g.v2_          = Vec4(t.v2_, 0.0f);
+
+        g.n0_          = Vec4(t.n0_, 0.0f);
+        g.n1_          = Vec4(t.n1_, 0.0f);
+        g.n2_          = Vec4(t.n2_, 0.0f);
+
+        g.uv0_uv1_     = Vec4(t.uv0_.x, t.uv0_.y, t.uv1_.x, t.uv1_.y);
+        g.uv2_         = Vec4(t.uv2_.x, t.uv2_.y, 0.0f, 0.0f);
+
+        tri_gpu[i] = g;
+    }
+
     if (!node_buffer.create(BufferType::SHADER_STORAGE_BUFFER,
-                           nodes_.size() * sizeof(BVHNode),
-                           nodes_.data(),
-                           BufferUsage::STATIC_DRAW)) {
+                            node_gpu.size() * sizeof(BVHNodeGpu),
+                            node_gpu.data(),
+                            BufferUsage::STATIC_DRAW)) {
         Logger::error("Failed to upload BVH nodes to GPU");
         return false;
     }
-    
-    // Upload triangles
+
     if (!triangle_buffer.create(BufferType::SHADER_STORAGE_BUFFER,
-                               ordered_triangles.size() * sizeof(Triangle),
-                               ordered_triangles.data(),
-                               BufferUsage::STATIC_DRAW)) {
+                                tri_gpu.size() * sizeof(TriangleGpu),
+                                tri_gpu.data(),
+                                BufferUsage::STATIC_DRAW)) {
         Logger::error("Failed to upload BVH triangles to GPU");
         return false;
     }
-    
+
     Logger::info("BVH uploaded to GPU successfully");
     return true;
 }

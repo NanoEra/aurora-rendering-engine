@@ -16,7 +16,9 @@ constexpr int DEFAULT_SPP = 1;
 constexpr int GBUFFER_POSITION = 0;
 constexpr int GBUFFER_NORMAL = 1;
 constexpr int GBUFFER_ALBEDO = 2;
-constexpr int GBUFFER_COUNT = 3;
+constexpr int GBUFFER_MATERIAL = 3;
+constexpr int GBUFFER_MATERIAL_ID = 4;
+constexpr int GBUFFER_COUNT = 5;
 
 /// @brief Compute shader work group size
 constexpr int COMPUTE_GROUP_SIZE_X = 16;

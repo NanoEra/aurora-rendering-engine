@@ -225,7 +225,7 @@ void setup_cornell_box() {
     g_scene->add_mesh(tall_box);
     
     // Short box (metal, right side)
-    auto short_box = create_box(Vec3(0.2f, -room_size, 0.2f), Vec3(0.9f, -0.4f, 0.9f), metal_id);
+    auto short_box = create_box(Vec3(0.2f, -room_size, 0.2f), Vec3(0.9f, -0.4f, 0.9f), /*metal_id*/white_id);
     short_box->upload_to_gpu();
     g_scene->add_mesh(short_box);
     

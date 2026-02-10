@@ -304,8 +304,11 @@ void RayTracer::upload_scene_data_(const Scene& scene) {
 
 void RayTracer::bind_gbuffer_(const GBuffer& gbuffer) {
     glBindImageTexture(0, gbuffer.get_texture(GBUFFER_POSITION), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(1, gbuffer.get_texture(GBUFFER_NORMAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-    glBindImageTexture(2, gbuffer.get_texture(GBUFFER_ALBEDO), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
+    glBindImageTexture(1, gbuffer.get_texture(GBUFFER_NORMAL),   0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(2, gbuffer.get_texture(GBUFFER_ALBEDO),   0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
+
+    glBindImageTexture(5, gbuffer.get_texture(GBUFFER_MATERIAL),    0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    glBindImageTexture(6, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);
 }
 
 void RayTracer::set_compute_shader(const Shader& shader) {

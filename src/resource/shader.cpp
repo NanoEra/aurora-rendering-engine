@@ -11,8 +11,27 @@ Shader::Shader()
     : handle_(INVALID_HANDLE) {
 }
 
+Shader::Shader(Shader&& other) noexcept
+    : handle_(other.handle_)
+    , uniform_cache_(std::move(other.uniform_cache_)) {
+    other.handle_ = INVALID_HANDLE;
+    other.uniform_cache_.clear();
+}
+
 Shader::~Shader() {
     // Don't auto-release, let user control lifetime
+}
+
+Shader& Shader::operator=(Shader&& other) noexcept {
+    if (this == &other) return *this;
+
+    release();
+    handle_ = other.handle_;
+    uniform_cache_ = std::move(other.uniform_cache_);
+
+    other.handle_ = INVALID_HANDLE;
+    other.uniform_cache_.clear();
+    return *this;
 }
 
 bool Shader::load(const std::string& vertex_path, const std::string& fragment_path) {

@@ -53,13 +53,13 @@ bool Renderer::initialize() {
     }
     
     // Pass compute shader to ray tracer
-    const Shader& rt_shader = shader_manager_->get_raytracing_shader();
-    if (!rt_shader.is_valid()) {
-        Logger::error("Ray tracing shader is invalid");
-        return false;
-    }
-    raytracer_->set_compute_shader(rt_shader);
-    
+	const auto& rt_shader = shader_manager_->get_raytracing_shader();
+	if (!rt_shader || !rt_shader->is_valid()) {
+		Logger::error("Ray tracing shader is invalid");
+		return false;
+	}
+	raytracer_->set_compute_shader(rt_shader);
+
     // Initialize screen blit
     screen_blit_ = std::make_unique<ScreenBlit>();
     if (!screen_blit_->initialize()) {
@@ -116,8 +116,12 @@ RenderStats Renderer::render(const Scene& scene, TextureHandle output_texture) {
     // Phase 1: G-Buffer pass
     auto gbuffer_start = std::chrono::high_resolution_clock::now();
     
-    const Shader& gbuffer_shader = shader_manager_->get_gbuffer_shader();
-    gbuffer_->render(scene, gbuffer_shader);
+	const auto& gbuffer_shader = shader_manager_->get_gbuffer_shader();
+	if (!gbuffer_shader || !gbuffer_shader->is_valid()) {
+		Logger::error("G-Buffer shader is invalid");
+		return stats;
+	}
+	gbuffer_->render(scene, *gbuffer_shader);
     
     auto gbuffer_end = std::chrono::high_resolution_clock::now();
     stats.gbuffer_time_ms_ = std::chrono::duration<float, std::milli>(gbuffer_end - gbuffer_start).count();
@@ -200,6 +204,11 @@ void Renderer::set_config(const RendererConfig &config) {
 		rt_config.enable_accumulation_ = config_.enable_accumulation_;
 		raytracer_->set_config(rt_config);
 	}
+}
+
+void Renderer::notify_scene_changed(const Scene &scene) {
+	raytracer_->reset_accumulation();
+	raytracer_->rebuild_bvh(scene);
 }
 
 } // namespace are

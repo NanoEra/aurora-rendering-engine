@@ -442,7 +442,7 @@ int main() {
     RendererConfig config;
     config.width_ = WINDOW_WIDTH;
     config.height_ = WINDOW_HEIGHT;
-    config.samples_per_pixel_ = 1;
+    config.samples_per_pixel_ = 4;
     config.max_ray_depth_ = 4;
     config.enable_accumulation_ = false;
     config.enable_denoising_ = false;

@@ -22,7 +22,7 @@ layout(binding = 0, rgba32f) uniform readonly image2D g_position;
 layout(binding = 1, rgba32f) uniform readonly image2D g_normal;
 layout(binding = 2, rgba8)   uniform readonly image2D g_albedo;
 
-// New: material params + material id
+// Material params + material id (for primary hit fast-path)
 layout(binding = 5, rgba32f) uniform readonly image2D g_material;
 layout(binding = 6, r32ui)   uniform readonly uimage2D g_material_id;
 
@@ -96,7 +96,6 @@ uniform uint u_frame_count;
 uniform uint u_samples_per_pixel;
 uniform uint u_max_depth;
 uniform uint u_light_count;
-uniform vec3 u_camera_position;
 uniform mat4 u_inv_view_projection;
 uniform bool u_enable_accumulation;
 uniform bool u_use_bvh;
@@ -234,7 +233,6 @@ bool intersect_triangle(Ray ray, TriangleGpu tri, inout HitInfo hit) {
     float t = dot(e2, qvec) * inv_det;
     if (t < EPSILON || t >= hit.t) return false;
 
-    // Interpolate normal/uv
     float w = 1.0 - u - v;
     vec3 n0 = tri.n0.xyz;
     vec3 n1 = tri.n1.xyz;
@@ -265,7 +263,6 @@ HitInfo trace_ray_bvh(Ray ray) {
         return hit;
     }
 
-    // Small fixed stack
     uint stack[64];
     int sp = 0;
     stack[sp++] = 0u;
@@ -288,11 +285,8 @@ HitInfo trace_ray_bvh(Ray ray) {
                 intersect_triangle(ray, tri, hit);
             }
         } else {
-            // Interior: push children
             uint left = left_first;
             uint right = left_first + 1u;
-
-            // Depth-first; no sorting (simple)
             if (sp < 63) stack[sp++] = right;
             if (sp < 63) stack[sp++] = left;
         }
@@ -330,9 +324,7 @@ bool trace_any_bvh(Ray ray, float t_max) {
         if (count > 0u) {
             for (uint i = 0u; i < count; ++i) {
                 TriangleGpu tri = bvh_tris[left_first + i];
-                if (intersect_triangle(ray, tri, hit)) {
-                    return true;
-                }
+                if (intersect_triangle(ray, tri, hit)) return true;
             }
         } else {
             uint left = left_first;
@@ -343,6 +335,45 @@ bool trace_any_bvh(Ray ray, float t_max) {
     }
 
     return false;
+}
+
+// ============================================================================
+// Primary-ray fast path via G-Buffer
+// ============================================================================
+
+/**
+ * @brief Read primary hit from G-Buffer if current pixel has geometry
+ * @note Uses g_position.w as "valid" marker (your gbuffer writes 1.0 on hits, clear is 0).
+ */
+HitInfo trace_primary_gbuffer(Ray ray, ivec2 pixel_coords) {
+    HitInfo hit;
+    hit.hit = false;
+    hit.t = MAX_FLOAT;
+    hit.position = vec3(0.0);
+    hit.normal = vec3(0.0, 1.0, 0.0);
+    hit.texcoord = vec2(0.0);
+    hit.material_id = 0u;
+
+    vec4 pos = imageLoad(g_position, pixel_coords);
+    if (pos.w <= 0.5) {
+        return hit;
+    }
+
+    vec3 p = pos.xyz;
+    vec3 n = normalize(imageLoad(g_normal, pixel_coords).xyz);
+
+    // integer material id
+    uint mid = imageLoad(g_material_id, pixel_coords).r;
+
+    hit.hit = true;
+    hit.position = p;
+    hit.normal = n;
+    hit.material_id = mid;
+
+    // For RR/any debug usage; path tracing uses this as starting point only.
+    hit.t = length(p - ray.origin);
+
+    return hit;
 }
 
 // ============================================================================
@@ -429,7 +460,6 @@ ScatterResult scatter_ray(Ray ray_in, HitInfo hit, Material mat, inout uint seed
 vec3 eval_direct_lighting(HitInfo hit, Material mat, inout uint seed) {
     if (u_light_count == 0u) return vec3(0.0);
 
-    // sample one light
     uint light_idx = uint(random_float(seed) * float(u_light_count)) % u_light_count;
     Light light = lights[light_idx];
 
@@ -455,18 +485,15 @@ vec3 eval_direct_lighting(HitInfo hit, Material mat, inout uint seed) {
     float n_dot_l = max(dot(hit.normal, L), 0.0);
     if (n_dot_l <= 0.0) return vec3(0.0);
 
-    // shadow ray
     Ray shadow_ray;
     shadow_ray.origin = hit.position + hit.normal * EPSILON;
     shadow_ray.direction = L;
 
     float t_max = (light.type == LIGHT_POINT) ? (dist - EPSILON) : MAX_FLOAT;
-    if (trace_any_bvh(shadow_ray, t_max)) {
-        return vec3(0.0);
-    }
+    if (trace_any_bvh(shadow_ray, t_max)) return vec3(0.0);
 
     float pdf_light = 1.0 / float(u_light_count);
-    vec3 brdf = mat.albedo * INV_PI; // diffuse direct only (simple)
+    vec3 brdf = mat.albedo * INV_PI;
     return brdf * radiance * n_dot_l / max(pdf_light, EPSILON);
 }
 
@@ -489,15 +516,52 @@ Material fetch_material(uint material_id) {
 }
 
 vec3 environment_color(vec3 dir) {
-    // simple dark sky
     return vec3(0.1, 0.1, 0.15);
 }
 
-vec3 trace_path(Ray ray, inout uint seed) {
+Ray generate_camera_ray_center(ivec2 pixel_coords, ivec2 image_size) {
+    vec2 uv = (vec2(pixel_coords) + vec2(0.5)) / vec2(image_size);
+    vec2 ndc = uv * 2.0 - 1.0;
+
+    vec4 p_near = u_inv_view_projection * vec4(ndc, 0.0, 1.0);
+    vec4 p_far  = u_inv_view_projection * vec4(ndc, 1.0, 1.0);
+    vec3 near_ws = p_near.xyz / p_near.w;
+    vec3 far_ws  = p_far.xyz / p_far.w;
+
+    Ray r;
+    r.origin = near_ws;
+    r.direction = normalize(far_ws - near_ws);
+    return r;
+}
+
+/**
+ * @brief Trace path with primary-ray G-Buffer acceleration
+ */
+vec3 trace_path_primary_gbuffer(ivec2 pixel_coords, ivec2 image_size, inout uint seed) {
+    Ray ray = generate_camera_ray_center(pixel_coords, image_size);
+
     vec3 radiance = vec3(0.0);
     vec3 throughput = vec3(1.0);
 
-    for (uint depth = 0u; depth < u_max_depth; ++depth) {
+    // Depth 0: try G-Buffer hit first
+    HitInfo hit0 = trace_primary_gbuffer(ray, pixel_coords);
+    if (hit0.hit) {
+        Material mat0 = fetch_material(hit0.material_id);
+
+        radiance += throughput * mat0.emission;
+        if (mat0.type == MATERIAL_DIFFUSE) {
+            radiance += throughput * eval_direct_lighting(hit0, mat0, seed);
+        }
+
+        ScatterResult sc0 = scatter_ray(ray, hit0, mat0, seed);
+        if (!sc0.scattered) return radiance;
+
+        throughput *= sc0.attenuation;
+        ray = sc0.scattered_ray;
+    }
+
+    // Subsequent bounces: BVH
+    for (uint depth = (hit0.hit ? 1u : 0u); depth < u_max_depth; ++depth) {
         HitInfo hit = trace_ray_bvh(ray);
         if (!hit.hit) {
             radiance += throughput * environment_color(ray.direction);
@@ -506,10 +570,7 @@ vec3 trace_path(Ray ray, inout uint seed) {
 
         Material mat = fetch_material(hit.material_id);
 
-        // emission
         radiance += throughput * mat.emission;
-
-        // direct light (only for diffuse to keep simple)
         if (mat.type == MATERIAL_DIFFUSE) {
             radiance += throughput * eval_direct_lighting(hit, mat, seed);
         }
@@ -519,7 +580,6 @@ vec3 trace_path(Ray ray, inout uint seed) {
 
         throughput *= sc.attenuation;
 
-        // RR
         if (depth > 3u) {
             float p = max(throughput.r, max(throughput.g, throughput.b));
             p = clamp(p, 0.0, 0.95);
@@ -544,12 +604,10 @@ void main() {
     uint seed = base_seed + u_frame_count * 719393u;
 
     vec3 color = vec3(0.0);
-
-    // Multi-sample
     uint spp = max(u_samples_per_pixel, 1u);
+
     for (uint s = 0u; s < spp; ++s) {
-        Ray cam_ray = generate_camera_ray(pixel_coords, image_size, seed);
-        color += trace_path(cam_ray, seed);
+        color += trace_path_primary_gbuffer(pixel_coords, image_size, seed);
     }
     color /= float(spp);
 

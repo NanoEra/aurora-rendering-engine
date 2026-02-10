@@ -135,6 +135,11 @@ void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
     int axis;
     float split_pos;
     float split_cost = find_best_split_(first_prim, prim_count, axis, split_pos);
+	if(split_cost == std::numeric_limits<float>::max()) {
+		node.left_first_ = first_prim;
+		node.count_ = prim_count;
+		return;
+	}
     
     // Check if split is beneficial
     float no_split_cost = prim_count * bounds.surface_area();
@@ -180,6 +185,7 @@ void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
 
 float BVH::find_best_split_(uint first_prim, uint prim_count, int& axis, float& split_pos) {
     float best_cost = std::numeric_limits<float>::max();
+	axis = 0, split_pos = 0.0f;
     
     AABB centroid_bounds = calculate_centroid_bounds_(first_prim, prim_count);
     

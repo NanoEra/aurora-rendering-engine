@@ -7,6 +7,7 @@
 #include "resource/buffer.h"
 #include "resource/shader.h"
 #include "scene/scene.h"
+#include <memory>
 
 namespace are {
 
@@ -70,14 +71,14 @@ public:
 
 	/// @brief Set compute shader (called by renderer)
 	/// @param shader Compute shader
-	void set_compute_shader(const Shader &shader);
+	void set_compute_shader(const std::shared_ptr<Shader>& shader);
 
 private:
 	uint width_;
 	uint height_;
 	RayTracerConfig config_;
 
-	Shader compute_shader_;
+	std::shared_ptr<Shader> compute_shader_;
 	TextureHandle accumulation_texture_;
 	BufferHandle scene_buffer_;
 	BufferHandle material_buffer_;

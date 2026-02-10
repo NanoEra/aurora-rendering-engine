@@ -57,6 +57,9 @@ public:
     /// @param config New configuration
     void set_config(const RendererConfig& config);
 
+	/// @brief Notify scene changed to rebuild acceleration
+	void notify_scene_changed(const Scene &scene);
+
 private:
     RendererConfig config_;
     std::unique_ptr<GBuffer> gbuffer_;

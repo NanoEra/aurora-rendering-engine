@@ -31,83 +31,77 @@ bool ShaderManager::initialize() {
 
 void ShaderManager::release() {
     if (!initialized_) return;
-    
-    gbuffer_shader_.release();
-    raytracing_shader_.release();
-    
+
     for (auto& pair : shader_cache_) {
-        pair.second.release();
+        if (pair.second) pair.second->release();
     }
     shader_cache_.clear();
-    
+
+    gbuffer_shader_.reset();
+    raytracing_shader_.reset();
+
     initialized_ = false;
     Logger::info("ShaderManager released");
 }
 
-Shader ShaderManager::load_shader(const std::string& name,
-                                  const std::string& vertex_path,
-                                  const std::string& fragment_path) {
-    // Check cache
+std::shared_ptr<Shader> ShaderManager::load_shader(const std::string& name,
+                                                   const std::string& vertex_path,
+                                                   const std::string& fragment_path) {
     auto it = shader_cache_.find(name);
     if (it != shader_cache_.end()) {
         Logger::info("Shader '" + name + "' loaded from cache");
         return it->second;
     }
-    
-    // Load shader
-    Shader shader;
-    if (!shader.load(vertex_path, fragment_path)) {
+
+    auto shader = std::make_shared<Shader>();
+    if (!shader->load(vertex_path, fragment_path)) {
         Logger::error("Failed to load shader '" + name + "'");
-        return Shader();
+        return nullptr;
     }
-    
+
     shader_cache_[name] = shader;
     Logger::info("Shader '" + name + "' loaded successfully");
     return shader;
 }
 
-Shader ShaderManager::load_compute_shader(const std::string& name,
-                                         const std::string& compute_path) {
-    // Check cache
+std::shared_ptr<Shader> ShaderManager::load_compute_shader(const std::string& name,
+                                                           const std::string& compute_path) {
     auto it = shader_cache_.find(name);
     if (it != shader_cache_.end()) {
         Logger::info("Compute shader '" + name + "' loaded from cache");
         return it->second;
     }
-    
-    // Load shader
-    Shader shader;
-    if (!shader.load_compute(compute_path)) {
+
+    auto shader = std::make_shared<Shader>();
+    if (!shader->load_compute(compute_path)) {
         Logger::error("Failed to load compute shader '" + name + "'");
-        return Shader();
+        return nullptr;
     }
-    
+
     shader_cache_[name] = shader;
     Logger::info("Compute shader '" + name + "' loaded successfully");
     return shader;
 }
 
-Shader ShaderManager::get_shader(const std::string& name) const {
+std::shared_ptr<Shader> ShaderManager::get_shader(const std::string& name) const {
     auto it = shader_cache_.find(name);
-    if (it != shader_cache_.end()) {
-        return it->second;
-    }
-    
+    if (it != shader_cache_.end()) return it->second;
+
     Logger::warning("Shader '" + name + "' not found in cache");
-    return Shader();
+    return nullptr;
 }
 
 bool ShaderManager::load_builtin_shaders_() {
-    // Load G-Buffer shader
-    if (!gbuffer_shader_.load("shaders/gbuffer.vert", "shaders/gbuffer.frag")) {
+    gbuffer_shader_ = std::make_shared<Shader>();
+    if (!gbuffer_shader_->load("shaders/gbuffer.vert", "shaders/gbuffer.frag")) {
         Logger::error("Failed to load G-Buffer shader");
         return false;
     }
     shader_cache_["gbuffer"] = gbuffer_shader_;
 
-    // Load ray tracing compute shader
     Logger::info("Loading ray tracing compute shader...");
-    if (!raytracing_shader_.load_compute("shaders/raytracing.comp")) {
+    raytracing_shader_ = std::make_shared<Shader>();
+    if (!raytracing_shader_->load_compute("shaders/raytracing.comp")) {
         Logger::error("Failed to load ray tracing shader");
         return false;
     }

@@ -12,6 +12,12 @@ class Shader {
 public:
     /// @brief Constructor
     Shader();
+
+	Shader(const Shader&) = delete;
+    Shader& operator=(const Shader&) = delete;
+
+    Shader(Shader&& other) noexcept;
+    Shader& operator=(Shader&& other) noexcept;
     
     /// @brief Destructor
     ~Shader();

@@ -603,22 +603,18 @@ void main() {
     uint base_seed = uint(pixel_coords.x) + uint(pixel_coords.y) * uint(image_size.x);
     uint seed = base_seed + u_frame_count * 719393u;
 
-    vec3 color = vec3(0.0);
-    uint spp = max(u_samples_per_pixel, 1u);
+	vec3 sample_color = trace_path_primary_gbuffer(pixel_coords, image_size, seed);
+	sample_color = clamp(sample_color, vec3(0.0), vec3(10.0));
 
-    for (uint s = 0u; s < spp; ++s) {
-        color += trace_path_primary_gbuffer(pixel_coords, image_size, seed);
-    }
-    color /= float(spp);
+	if (u_enable_accumulation) {
+		vec3 sum = imageLoad(accumulation_image, pixel_coords).rgb;
+		sum += sample_color;
+		imageStore(accumulation_image, pixel_coords, vec4(sum, 1.0));
 
-    color = clamp(color, vec3(0.0), vec3(10.0));
-
-    if (u_enable_accumulation && u_frame_count > 0u) {
-        vec3 accumulated = imageLoad(accumulation_image, pixel_coords).rgb;
-        float w = 1.0 / float(u_frame_count + 1u);
-        color = mix(accumulated, color, w);
-    }
-
-    imageStore(accumulation_image, pixel_coords, vec4(color, 1.0));
-    imageStore(output_image, pixel_coords, vec4(color, 1.0));
+		float inv_n = 1.0 / float(u_frame_count + 1u); // u_frame_count is "sample index"
+		vec3 avg = sum * inv_n;
+		imageStore(output_image, pixel_coords, vec4(avg, 1.0));
+	} else {
+		imageStore(output_image, pixel_coords, vec4(sample_color, 1.0));
+	}
 }

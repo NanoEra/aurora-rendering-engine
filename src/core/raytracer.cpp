@@ -184,14 +184,48 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 	uint num_groups_x = (width_ + COMPUTE_GROUP_SIZE_X - 1) / COMPUTE_GROUP_SIZE_X;
 	uint num_groups_y = (height_ + COMPUTE_GROUP_SIZE_Y - 1) / COMPUTE_GROUP_SIZE_Y;
 
-	glDispatchCompute(num_groups_x, num_groups_y, 1);
+	const uint spp = std::max(config_.samples_per_pixel_, 1u);
 
-	// Memory barrier
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+	// We interpret frame_count_ as "accumulated sample count"
+	for (uint i = 0; i < spp; ++i) {
+		compute_shader_->use();
 
-	// Increment frame count for accumulation
-	if (config_.enable_accumulation_) {
-		frame_count_++;
+		// Bind G-Buffer textures
+		bind_gbuffer_(gbuffer);
+
+		// Bind output and accumulation textures
+		glBindImageTexture(3, output_texture, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA32F);
+		glBindImageTexture(4, accumulation_texture_, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
+
+		// Bind BVH buffers if enabled
+		if (config_.use_bvh_ && bvh_built_) {
+			bvh_node_buffer_.bind_base(2);
+			bvh_triangle_buffer_.bind_base(3);
+			compute_shader_->set_bool("u_use_bvh", true);
+			compute_shader_->set_uint("u_bvh_node_count", bvh_->get_node_count());
+		} else {
+			compute_shader_->set_bool("u_use_bvh", false);
+			compute_shader_->set_uint("u_bvh_node_count", 0u);
+		}
+
+		// Set uniforms (u_frame_count is sample index)
+		compute_shader_->set_uint("u_frame_count", frame_count_);
+		compute_shader_->set_uint("u_samples_per_pixel", 1u); // shader does 1 sample per dispatch now
+		compute_shader_->set_uint("u_max_depth", config_.max_depth_);
+		compute_shader_->set_uint("u_light_count", static_cast<uint>(scene.get_lights().size()));
+		compute_shader_->set_bool("u_enable_accumulation", config_.enable_accumulation_);
+
+		// Camera
+		const Camera& camera = scene.get_camera();
+		Mat4 inv_vp = glm::inverse(camera.get_view_projection_matrix());
+		compute_shader_->set_mat4("u_inv_view_projection", inv_vp);
+
+		glDispatchCompute(num_groups_x, num_groups_y, 1);
+		glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+		if (config_.enable_accumulation_) {
+			frame_count_++;
+		}
 	}
 }
 

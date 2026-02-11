@@ -54,10 +54,15 @@ public:
     /// @return Ray tracing shader
     const std::shared_ptr<Shader>& get_raytracing_shader() const { return raytracing_shader_; }
 
+	/// @brief Get mean denoise compute shader
+    /// @return Denoise shader (nullptr if not loaded)
+    const std::shared_ptr<Shader>& get_denoise_shader() const { return denoise_shader_; }
+
 private:
 	std::unordered_map<std::string, std::shared_ptr<Shader>> shader_cache_;
 	std::shared_ptr<Shader> gbuffer_shader_;
 	std::shared_ptr<Shader> raytracing_shader_;
+	std::shared_ptr<Shader> denoise_shader_;
     
     bool initialized_;
     

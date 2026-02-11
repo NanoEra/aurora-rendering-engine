@@ -5,6 +5,18 @@
 
 namespace are {
 
+namespace {
+	uint fnv1a_hash_bytes(const void *data, size_t size) {
+		const uint8_t *bytes = static_cast<const uint8_t *>(data);
+		uint h = 2166136261u;
+		for (size_t i = 0; i < size; ++i) {
+			h ^= bytes[i];
+			h *= 16777619u;
+		}
+		return h;
+	}
+} // namespace
+
 RayTracer::RayTracer(uint width, uint height, const RayTracerConfig &config)
 	: width_(width)
 	, height_(height)
@@ -15,6 +27,8 @@ RayTracer::RayTracer(uint width, uint height, const RayTracerConfig &config)
 	, light_buffer_(INVALID_HANDLE)
 	, bvh_(nullptr)
 	, bvh_built_(false)
+	, materials_hash_(0u)
+	, lights_hash_(0u)
 	, frame_count_(0)
 	, initialized_(false) {
 }
@@ -104,6 +118,7 @@ bool RayTracer::rebuild_bvh(const Scene &scene) {
 	}
 
 	bvh_built_ = true;
+	reset_accumulation();
 	Logger::info("BVH built and uploaded successfully");
 	return true;
 }
@@ -227,7 +242,7 @@ void RayTracer::set_config(const RayTracerConfig &config) {
 }
 
 void RayTracer::upload_scene_data_(const Scene &scene) {
-	// Upload materials
+	// Upload materials (on change only)
 	const auto &materials = scene.get_materials();
 	if (!materials.empty()) {
 		struct MaterialData {
@@ -244,7 +259,7 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 		material_data.reserve(materials.size());
 
 		for (const auto &mat : materials) {
-			MaterialData data;
+			MaterialData data {};
 			data.albedo = mat->get_albedo();
 			data.metallic = mat->get_metallic();
 			data.emission = mat->get_emission();
@@ -254,14 +269,26 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 			material_data.push_back(data);
 		}
 
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, material_buffer_);
-		glBufferData(GL_SHADER_STORAGE_BUFFER,
-			material_data.size() * sizeof(MaterialData),
-			material_data.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, material_buffer_);
+		uint h = fnv1a_hash_bytes(material_data.data(), material_data.size() * sizeof(MaterialData));
+		if (h != materials_hash_) {
+			materials_hash_ = h;
+
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, material_buffer_);
+			glBufferData(GL_SHADER_STORAGE_BUFFER,
+				material_data.size() * sizeof(MaterialData),
+				material_data.data(), GL_DYNAMIC_DRAW);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, material_buffer_);
+
+			reset_accumulation(); // materials changed => invalidate accumulation
+		} else {
+			// Still ensure bound (in case other code changed bindings)
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, material_buffer_);
+		}
+	} else {
+		materials_hash_ = 0u;
 	}
 
-	// Upload lights
+	// Upload lights (on change only)
 	const auto &lights = scene.get_lights();
 	if (!lights.empty()) {
 		struct LightData {
@@ -279,7 +306,7 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 		light_data.reserve(lights.size());
 
 		for (const auto &light : lights) {
-			LightData data;
+			LightData data {};
 			data.position = light->get_position();
 			data.type = static_cast<int>(light->get_type());
 			data.direction = light->get_direction();
@@ -290,11 +317,22 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 			light_data.push_back(data);
 		}
 
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_buffer_);
-		glBufferData(GL_SHADER_STORAGE_BUFFER,
-			light_data.size() * sizeof(LightData),
-			light_data.data(), GL_DYNAMIC_DRAW);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, light_buffer_);
+		uint h = fnv1a_hash_bytes(light_data.data(), light_data.size() * sizeof(LightData));
+		if (h != lights_hash_) {
+			lights_hash_ = h;
+
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, light_buffer_);
+			glBufferData(GL_SHADER_STORAGE_BUFFER,
+				light_data.size() * sizeof(LightData),
+				light_data.data(), GL_DYNAMIC_DRAW);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, light_buffer_);
+
+			reset_accumulation(); // lights changed => invalidate accumulation
+		} else {
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, light_buffer_);
+		}
+	} else {
+		lights_hash_ = 0u;
 	}
 }
 

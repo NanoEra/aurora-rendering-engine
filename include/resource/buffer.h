@@ -25,6 +25,12 @@ class Buffer {
 public:
     /// @brief Constructor
     Buffer();
+
+	Buffer(const Buffer&) = delete;
+    Buffer& operator=(const Buffer&) = delete;
+
+    Buffer(Buffer&& other) noexcept;
+    Buffer& operator=(Buffer&& other) noexcept;
     
     /// @brief Destructor
     ~Buffer();

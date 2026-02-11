@@ -71,7 +71,7 @@ public:
 
 	/// @brief Set compute shader (called by renderer)
 	/// @param shader Compute shader
-	void set_compute_shader(const std::shared_ptr<Shader>& shader);
+	void set_compute_shader(const std::shared_ptr<Shader> &shader);
 
 private:
 	uint width_;
@@ -89,6 +89,9 @@ private:
 	Buffer bvh_node_buffer_; // 添加
 	Buffer bvh_triangle_buffer_; // 添加
 	bool bvh_built_; // 添加
+
+	uint materials_hash_;
+	uint lights_hash_;
 
 	uint frame_count_;
 	bool initialized_;

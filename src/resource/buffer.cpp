@@ -32,8 +32,31 @@ Buffer::Buffer()
     , usage_(BufferUsage::STATIC_DRAW) {
 }
 
+Buffer::Buffer(Buffer&& other) noexcept
+    : handle_(other.handle_)
+    , type_(other.type_)
+    , size_(other.size_)
+    , usage_(other.usage_) {
+    other.handle_ = INVALID_HANDLE;
+    other.size_ = 0;
+}
+
+Buffer& Buffer::operator=(Buffer&& other) noexcept {
+    if (this == &other) return *this;
+
+    release();
+    handle_ = other.handle_;
+    type_ = other.type_;
+    size_ = other.size_;
+    usage_ = other.usage_;
+
+    other.handle_ = INVALID_HANDLE;
+    other.size_ = 0;
+    return *this;
+}
+
 Buffer::~Buffer() {
-    // Don't auto-release, let user control lifetime
+	release();
 }
 
 bool Buffer::create(BufferType type, size_t size, const void* data, BufferUsage usage) {

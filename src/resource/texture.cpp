@@ -104,8 +104,37 @@ Texture::Texture()
     , has_mipmaps_(false) {
 }
 
+Texture::Texture(Texture&& other) noexcept
+    : handle_(other.handle_)
+    , width_(other.width_)
+    , height_(other.height_)
+    , format_(other.format_)
+    , has_mipmaps_(other.has_mipmaps_) {
+    other.handle_ = INVALID_HANDLE;
+    other.width_ = 0;
+    other.height_ = 0;
+    other.has_mipmaps_ = false;
+}
+
+Texture& Texture::operator=(Texture&& other) noexcept {
+    if (this == &other) return *this;
+
+    release();
+    handle_ = other.handle_;
+    width_ = other.width_;
+    height_ = other.height_;
+    format_ = other.format_;
+    has_mipmaps_ = other.has_mipmaps_;
+
+    other.handle_ = INVALID_HANDLE;
+    other.width_ = 0;
+    other.height_ = 0;
+    other.has_mipmaps_ = false;
+    return *this;
+}
+
 Texture::~Texture() {
-    // Don't auto-release, let user control lifetime
+	release();
 }
 
 bool Texture::load_from_file(const std::string& path, bool generate_mipmaps) {

@@ -10,9 +10,7 @@ build/
 
 # LSP files
 .clangd
-.clangd-format
-..clangd
-..clangd-format
+.clang-format
 
 # Compiled files
 *.o

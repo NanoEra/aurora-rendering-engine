@@ -66,6 +66,13 @@ bool Renderer::initialize() {
         Logger::error("Failed to initialize screen blit");
         return false;
     }
+
+	denoiser_ = std::make_unique<Denoiser>(config_.width_, config_.height_);
+	const auto& denoise_shader = shader_manager_->get_denoise_shader();
+	if (!denoiser_->initialize(denoise_shader)) {
+		Logger::error("Failed to initialize denoiser");
+		return false;
+	}
     
     initialized_ = true;
     Logger::info("Aurora Rendering Engine initialized successfully");
@@ -96,6 +103,11 @@ void Renderer::shutdown() {
 	if (shader_manager_) {
 		shader_manager_->release();
 		shader_manager_.reset();
+	}
+
+	if (denoiser_) {
+		denoiser_->release();
+		denoiser_.reset();
 	}
 
 	initialized_ = false;
@@ -148,11 +160,18 @@ RenderStats Renderer::render(const Scene& scene, TextureHandle output_texture) {
     auto raytrace_end = std::chrono::high_resolution_clock::now();
     stats.raytrace_time_ms_ = std::chrono::duration<float, std::milli>(raytrace_end - raytrace_start).count();
     
-    // Phase 3: Blit to screen if output is default framebuffer
-    if (created_temp_texture && output_texture == 0) {
-        screen_blit_->blit_fullscreen(rt_output);
-        glDeleteTextures(1, &rt_output);
-    }
+	// Phase 3: Denoise texture
+	TextureHandle final_output = rt_output;
+
+	if (config_.enable_denoising_ && denoiser_) {
+		final_output = denoiser_->denoise(rt_output, 1); // radius=1 => 3x3 mean
+	}
+
+    // Phase 4: Blit to screen if output is default framebuffer
+	if (created_temp_texture && output_texture == 0) {
+		screen_blit_->blit_fullscreen(final_output);
+		glDeleteTextures(1, &rt_output);
+	}
     
     // Calculate total frame time
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -182,6 +201,7 @@ void Renderer::resize(uint width, uint height) {
 	if (initialized_) {
 		gbuffer_->resize(width, height);
 		raytracer_->resize(width, height);
+		denoiser_->resize(width, height);
 
 		Logger::info("Renderer resized to " + std::to_string(width) + "x" + std::to_string(height));
 	}

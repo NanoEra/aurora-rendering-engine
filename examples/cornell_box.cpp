@@ -445,7 +445,7 @@ int main() {
     config.samples_per_pixel_ = 1;
     config.max_ray_depth_ = 4;
     config.enable_accumulation_ = true;
-    config.enable_denoising_ = false;
+    config.enable_denoising_ = true;
     
     g_renderer = std::make_unique<Renderer>(config);
     if (!g_renderer->initialize()) {

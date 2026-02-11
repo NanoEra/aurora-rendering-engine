@@ -6,6 +6,7 @@
 #include "core/gbuffer.h"
 #include "core/raytracer.h"
 #include "core/screen_blit.h"
+#include "core/denoiser.h"
 #include "core/shader_manager.h"
 #include <memory>
 
@@ -66,6 +67,7 @@ private:
     std::unique_ptr<RayTracer> raytracer_;
     std::unique_ptr<ShaderManager> shader_manager_;
 	std::unique_ptr<ScreenBlit> screen_blit_;
+	std::unique_ptr<Denoiser> denoiser_;
     
     bool initialized_;
     uint frame_count_;

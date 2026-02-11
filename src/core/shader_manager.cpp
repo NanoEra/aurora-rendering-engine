@@ -39,6 +39,7 @@ void ShaderManager::release() {
 
     gbuffer_shader_.reset();
     raytracing_shader_.reset();
+	denoise_shader_.reset();
 
     initialized_ = false;
     Logger::info("ShaderManager released");
@@ -107,6 +108,15 @@ bool ShaderManager::load_builtin_shaders_() {
     }
     shader_cache_["raytracing"] = raytracing_shader_;
     Logger::info("Ray tracing shader loaded successfully");
+
+	Logger::info("Loading denoise compute shader...");
+    denoise_shader_ = std::make_shared<Shader>();
+    if (!denoise_shader_->load_compute("shaders/denoiser.comp")) {
+        Logger::error("Failed to load denoise shader");
+        return false;
+    }
+    shader_cache_["denoise"] = denoise_shader_;
+    Logger::info("Denoise shader loaded successfully");
 
     return true;
 }

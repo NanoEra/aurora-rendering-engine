@@ -22,6 +22,9 @@ declare -A TYPE_EXTS
 TYPE_COLOR["C/C++"]="Cyan"
 TYPE_EXTS["C/C++"]='c cpp cc cxx h hpp hh hxx'
 
+TYPE_COLOR["OpenGL Shader"]="Blue"
+TYPE_EXTS["OpenGL Shader"]='glsl frag vert comp'
+
 TYPE_COLOR["C#"]="Green"
 TYPE_EXTS["C#"]='cs'
 

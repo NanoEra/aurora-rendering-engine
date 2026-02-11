@@ -8,6 +8,12 @@ build/
 *.swo
 *~
 
+# LSP files
+.clangd
+.clangd-format
+..clangd
+..clangd-format
+
 # Compiled files
 *.o
 *.obj

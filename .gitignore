@@ -37,6 +37,3 @@ Makefile
 # OS files
 .DS_Store
 Thumbs.db
-
-# Experiments (optional, can be tracked)
-experiments/*

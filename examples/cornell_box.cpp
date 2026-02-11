@@ -442,10 +442,10 @@ int main() {
     RendererConfig config;
     config.width_ = WINDOW_WIDTH;
     config.height_ = WINDOW_HEIGHT;
-    config.samples_per_pixel_ = 10;
+    config.samples_per_pixel_ = 4;
     config.max_ray_depth_ = 4;
-    config.enable_accumulation_ = true;
-    config.enable_denoising_ = true;
+    config.enable_accumulation_ = false;
+    config.enable_denoising_ = false;
     
     g_renderer = std::make_unique<Renderer>(config);
     if (!g_renderer->initialize()) {

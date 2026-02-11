@@ -1,121 +1,102 @@
-cmake_minimum_required(VERSION 3.15)
-project(AuroraRenderingEngine VERSION 1.0.0 LANGUAGES CXX C)
 
+# =========================================
+# Basic Configuration
+# =========================================
+
+cmake_minimum_required(VERSION 3.16)
+
+project(are LANGUAGES C CXX)
+
+# Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Options
-option(ARE_BUILD_TESTS "Build tests" ON)
-option(ARE_BUILD_EXAMPLES "Build examples" ON)
+# =========================================
+# Build Configuration & Flags
+# =========================================
 
-# Find dependencies
-find_package(OpenGL REQUIRED)
-find_package(glm REQUIRED)
-find_package(glfw3 REQUIRED)
-
-# GLAD library
-add_library(glad STATIC
-    lib/glad/src/glad.c
-)
-target_include_directories(glad PUBLIC lib/glad/include)
-
-# stb_image library
-set(STB_IMAGE_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/lib/stb/stb_image.cpp)
-if(NOT EXISTS ${STB_IMAGE_SOURCE})
-    file(WRITE ${STB_IMAGE_SOURCE} 
-"#define STB_IMAGE_IMPLEMENTATION
-#include \"stb_image.h\"
-")
+# Set default build type to Release if not specified
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
 endif()
 
-add_library(stb_image STATIC ${STB_IMAGE_SOURCE})
-target_include_directories(stb_image PUBLIC lib/stb)
+# Print Configuration Info
+message(STATUS "")
+message(STATUS "====== Build Configuration ======")
+message(STATUS "Project Name:    ${PROJECT_NAME}")
+message(STATUS "Build Type:      ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ Standard:    ${CMAKE_CXX_STANDARD}")
+message(STATUS "Compiler ID:     ${CMAKE_CXX_COMPILER_ID}")
+message(STATUS "Compiler:        ${CMAKE_CXX_COMPILER}")
+message(STATUS "================================")
+message(STATUS "")
 
-# Collect all source files automatically
-file(GLOB_RECURSE ARE_SOURCES 
-    "src/*.cpp"
-    "src/*.c"
+# Set compiler flags based on build type
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-O3 -Wall -Wextra)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(-Og -Wall -g)
+endif()
+
+# =========================================
+# Dependencies
+# =========================================
+
+# Find required packages
+find_package(OpenGL REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(Threads REQUIRED)
+
+# =========================================
+# Source Files
+# =========================================
+
+# Collect source files from src/
+file(GLOB_RECURSE SRC_FILES 
+    "${CMAKE_SOURCE_DIR}/src/*.c"
+    "${CMAKE_SOURCE_DIR}/src/*.cpp"
 )
 
-# Collect all header files
-file(GLOB_RECURSE ARE_HEADERS 
-    "include/*.h"
-    "include/*.hpp"
+# Add specific library source files
+list(APPEND SRC_FILES 
+    "${CMAKE_SOURCE_DIR}/lib/glad/glad.c"
+    "${CMAKE_SOURCE_DIR}/lib/stb/stb_image.cpp"
 )
 
-# Aurora Rendering Engine library
-add_library(are STATIC ${ARE_SOURCES} ${ARE_HEADERS})
+# =========================================
+# Include Directories
+# =========================================
 
-target_include_directories(are
+# Collect all subdirectories in lib/ for include paths
+file(GLOB LIB_DIRS LIST_DIRECTORIES true "${CMAKE_SOURCE_DIR}/lib/*")
+
+# Filter to keep only directories
+set(LIB_INCLUDE_DIRS "")
+foreach(DIR ${LIB_DIRS})
+    if(IS_DIRECTORY ${DIR})
+        list(APPEND LIB_INCLUDE_DIRS ${DIR})
+    endif()
+endforeach()
+
+# =========================================
+# Target Definition
+# =========================================
+
+# Create static library
+add_library(${PROJECT_NAME} STATIC ${SRC_FILES})
+
+# Add include directories
+target_include_directories(${PROJECT_NAME}
     PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        ${CMAKE_SOURCE_DIR}/include  # Public headers
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${LIB_INCLUDE_DIRS}          # Internal lib headers (glad, stb, etc.)
 )
 
-target_link_libraries(are
+# Link libraries
+target_link_libraries(${PROJECT_NAME}
     PUBLIC
         OpenGL::GL
-        glm::glm
-    PRIVATE
-        glad
-        stb_image
+        glfw
+        Threads::Threads
 )
-
-# Copy shaders to build directory
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shaders
-     DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-
-# Examples
-if(ARE_BUILD_EXAMPLES)
-    # Cornell Box example
-    add_executable(cornell_box examples/cornell_box.cpp)
-    target_link_libraries(cornell_box
-        PRIVATE
-            are
-            glfw
-    )
-    
-    # Copy shaders to example directory
-    add_custom_command(TARGET cornell_box POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_CURRENT_SOURCE_DIR}/shaders
-        $<TARGET_FILE_DIR:cornell_box>/shaders
-    )
-endif()
-
-# Tests
-if(ARE_BUILD_TESTS)
-    enable_testing()
-    
-    # Basic test
-    add_executable(test_basic tests/test_basic.cpp)
-    target_link_libraries(test_basic PRIVATE are)
-    add_test(NAME BasicTest COMMAND test_basic)
-endif()
-
-# Install
-install(TARGETS are
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-)
-
-install(DIRECTORY include/
-    DESTINATION include
-    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
-)
-
-install(DIRECTORY shaders/
-    DESTINATION share/are/shaders
-)
-
-# Print configuration
-message(STATUS "Aurora Rendering Engine Configuration:")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  C++ standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "  Build examples: ${ARE_BUILD_EXAMPLES}")
-message(STATUS "  Build tests: ${ARE_BUILD_TESTS}")
-message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")

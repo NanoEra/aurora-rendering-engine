@@ -3,6 +3,7 @@
 
 #include "basic/types.h"
 #include "resource/shader.h"
+#include <memory>
 
 namespace are {
 
@@ -35,7 +36,7 @@ public:
     void blit_fullscreen(TextureHandle texture);
 
 private:
-    Shader shader_;
+	std::shared_ptr<Shader> shader_;
     uint vao_;
     uint vbo_;
     bool initialized_;

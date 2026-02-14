@@ -38,6 +38,7 @@ void ShaderManager::release() {
     shader_cache_.clear();
 
     gbuffer_shader_.reset();
+	screen_blit_shader_.reset();
     raytracing_shader_.reset();
 	denoise_shader_.reset();
 
@@ -93,6 +94,8 @@ std::shared_ptr<Shader> ShaderManager::get_shader(const std::string& name) const
 }
 
 bool ShaderManager::load_builtin_shaders_() {
+	// Load G-buffer shader
+	ARE_LOG_INFO("Loading G-buffer shaders..");
     gbuffer_shader_ = std::make_shared<Shader>();
     if (!gbuffer_shader_->load("shaders/gbuffer.vert", "shaders/gbuffer.frag")) {
         ARE_LOG_ERROR("Failed to load G-Buffer shader");
@@ -100,6 +103,17 @@ bool ShaderManager::load_builtin_shaders_() {
     }
     shader_cache_["gbuffer"] = gbuffer_shader_;
 
+	// Load screen bliting shader
+	ARE_LOG_INFO("Loading screen blit shaders...");
+    screen_blit_shader_ = std::make_shared<Shader>();
+    if (!screen_blit_shader_->load("shaders/screen_blit.vert", "shaders/screen_blit.frag")) {
+        ARE_LOG_ERROR("Failed to load screen blit shader");
+        return false;
+    }
+    shader_cache_["screen_blit"] = denoise_shader_;
+    ARE_LOG_INFO("Screen blit shader loaded successfully");
+
+	// Load ray tracing shader
     ARE_LOG_INFO("Loading ray tracing compute shader...");
     raytracing_shader_ = std::make_shared<Shader>();
     if (!raytracing_shader_->load_compute("shaders/raytracing.comp")) {
@@ -109,6 +123,7 @@ bool ShaderManager::load_builtin_shaders_() {
     shader_cache_["raytracing"] = raytracing_shader_;
     ARE_LOG_INFO("Ray tracing shader loaded successfully");
 
+	// Load denoising shader
 	ARE_LOG_INFO("Loading denoise compute shader...");
     denoise_shader_ = std::make_shared<Shader>();
     if (!denoise_shader_->load_compute("shaders/denoiser.comp")) {

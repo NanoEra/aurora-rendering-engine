@@ -4,33 +4,6 @@
 
 namespace are {
 
-namespace {
-    const char* VERTEX_SHADER_SOURCE = R"(
-        #version 430 core
-        layout(location = 0) in vec2 a_position;
-        layout(location = 1) in vec2 a_texcoord;
-        
-        out vec2 v_texcoord;
-        
-        void main() {
-            v_texcoord = a_texcoord;
-            gl_Position = vec4(a_position, 0.0, 1.0);
-        }
-    )";
-    
-    const char* FRAGMENT_SHADER_SOURCE = R"(
-        #version 430 core
-        in vec2 v_texcoord;
-        out vec4 frag_color;
-        
-        uniform sampler2D u_texture;
-        
-        void main() {
-            frag_color = texture(u_texture, v_texcoord);
-        }
-    )";
-}
-
 ScreenBlit::ScreenBlit()
     : vao_(0)
     , vbo_(0)
@@ -47,12 +20,6 @@ bool ScreenBlit::initialize() {
         return true;
     }
     
-    // Compile shader
-    if (!shader_.compile(VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE)) {
-        ARE_LOG_ERROR("Failed to compile screen blit shader");
-        return false;
-    }
-    
     // Create fullscreen quad
     create_quad_();
     
@@ -64,7 +31,7 @@ bool ScreenBlit::initialize() {
 void ScreenBlit::release() {
     if (!initialized_) return;
     
-    shader_.release();
+	shader_.reset();
     
     if (vao_ != 0) {
         glDeleteVertexArrays(1, &vao_);
@@ -92,8 +59,8 @@ void ScreenBlit::blit(TextureHandle texture, int x, int y, uint width, uint heig
     glDisable(GL_DEPTH_TEST);
     
     // Use shader
-    shader_.use();
-    shader_.set_int("u_texture", 0);
+    shader_->use();
+    shader_->set_int("u_texture", 0);
     
     // Bind texture
     glActiveTexture(GL_TEXTURE0);

@@ -23,7 +23,7 @@ std::unique_ptr<Scene> g_scene = nullptr;
 
 // GLFW error callback
 void glfw_error_callback(int error, const char* description) {
-    Logger::error("GLFW Error " + std::to_string(error) + ": " + std::string(description));
+    ARE_LOG_ERROR("GLFW Error " + std::to_string(error) + ": " + std::string(description));
 }
 
 /// @brief Create a quad mesh
@@ -246,7 +246,7 @@ void setup_cornell_box() {
     light->set_range(10.0f);
     g_scene->add_light(light);
     
-    Logger::info("Cornell Box scene created");
+    ARE_LOG_INFO("Cornell Box scene created");
 }
 
 /// @brief Initialize GLFW and create window
@@ -255,11 +255,11 @@ bool init_window() {
     glfwSetErrorCallback(glfw_error_callback);
     
     if (!glfwInit()) {
-        Logger::error("Failed to initialize GLFW");
+        ARE_LOG_ERROR("Failed to initialize GLFW");
         return false;
     }
     
-    Logger::info("GLFW initialized successfully");
+    ARE_LOG_INFO("GLFW initialized successfully");
     
     // Request OpenGL 4.5 Core Profile
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -271,35 +271,35 @@ bool init_window() {
     glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
     glfwWindowHint(GLFW_SAMPLES, 0);
     
-    Logger::info("Creating window...");
+    ARE_LOG_INFO("Creating window...");
     g_window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Aurora - Cornell Box", nullptr, nullptr);
     
     if (!g_window) {
-        Logger::error("Failed to create GLFW window");
-        Logger::error("Possible reasons:");
-        Logger::error("  1. OpenGL 4.5 not supported by your GPU/driver");
-        Logger::error("  2. No display server running (X11/Wayland)");
-        Logger::error("  3. Insufficient GPU resources");
+        ARE_LOG_ERROR("Failed to create GLFW window");
+        ARE_LOG_ERROR("Possible reasons:");
+        ARE_LOG_ERROR("  1. OpenGL 4.5 not supported by your GPU/driver");
+        ARE_LOG_ERROR("  2. No display server running (X11/Wayland)");
+        ARE_LOG_ERROR("  3. Insufficient GPU resources");
         
         // Try to get more info
         int major, minor, rev;
         glfwGetVersion(&major, &minor, &rev);
-        Logger::info("GLFW version: " + std::to_string(major) + "." + 
+        ARE_LOG_INFO("GLFW version: " + std::to_string(major) + "." + 
                     std::to_string(minor) + "." + std::to_string(rev));
         
         glfwTerminate();
         return false;
     }
     
-    Logger::info("Window created successfully");
+    ARE_LOG_INFO("Window created successfully");
     
     glfwMakeContextCurrent(g_window);
     glfwSwapInterval(1); // Enable vsync
     
     // Load OpenGL functions
-    Logger::info("Loading OpenGL functions...");
+    ARE_LOG_INFO("Loading OpenGL functions...");
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        Logger::error("Failed to initialize GLAD");
+        ARE_LOG_ERROR("Failed to initialize GLAD");
         return false;
     }
     
@@ -309,35 +309,35 @@ bool init_window() {
     const char* version = (const char*)glGetString(GL_VERSION);
     const char* glsl_version = (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
     
-    Logger::info("OpenGL Vendor: " + std::string(vendor ? vendor : "Unknown"));
-    Logger::info("OpenGL Renderer: " + std::string(renderer ? renderer : "Unknown"));
-    Logger::info("OpenGL Version: " + std::string(version ? version : "Unknown"));
-    Logger::info("GLSL Version: " + std::string(glsl_version ? glsl_version : "Unknown"));
+    ARE_LOG_INFO("OpenGL Vendor: " + std::string(vendor ? vendor : "Unknown"));
+    ARE_LOG_INFO("OpenGL Renderer: " + std::string(renderer ? renderer : "Unknown"));
+    ARE_LOG_INFO("OpenGL Version: " + std::string(version ? version : "Unknown"));
+    ARE_LOG_INFO("GLSL Version: " + std::string(glsl_version ? glsl_version : "Unknown"));
     
     // Check OpenGL version
     GLint major_ver, minor_ver;
     glGetIntegerv(GL_MAJOR_VERSION, &major_ver);
     glGetIntegerv(GL_MINOR_VERSION, &minor_ver);
     
-    Logger::info("OpenGL Context: " + std::to_string(major_ver) + "." + std::to_string(minor_ver));
+    ARE_LOG_INFO("OpenGL Context: " + std::to_string(major_ver) + "." + std::to_string(minor_ver));
     
     // if (major_ver < 4 || (major_ver == 4 && minor_ver < 5)) {
-    //     Logger::error("OpenGL 4.5 or higher is required!");
-    //     Logger::error("Your system supports: OpenGL " + std::to_string(major_ver) + "." + std::to_string(minor_ver));
+    //     ARE_LOG_ERROR("OpenGL 4.5 or higher is required!");
+    //     ARE_LOG_ERROR("Your system supports: OpenGL " + std::to_string(major_ver) + "." + std::to_string(minor_ver));
     //     return false;
     // }
     
     // Check compute shader support
     GLint max_compute_work_group_invocations;
     glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &max_compute_work_group_invocations);
-    Logger::info("Max compute work group invocations: " + std::to_string(max_compute_work_group_invocations));
+    ARE_LOG_INFO("Max compute work group invocations: " + std::to_string(max_compute_work_group_invocations));
     
     return true;
 }
 
 /// @brief Main render loop
 void render_loop() {
-    Logger::info("Entering render loop...");
+    ARE_LOG_INFO("Entering render loop...");
     
     int frame_count = 0;
     double last_time = glfwGetTime();
@@ -369,11 +369,11 @@ void render_loop() {
         // Print detailed stats every 60 frames
         static int stat_frame_count = 0;
         if (++stat_frame_count % 60 == 0) {
-            Logger::info("Frame time: " + std::to_string(stats.frame_time_ms_) + " ms (" +
+            ARE_LOG_INFO("Frame time: " + std::to_string(stats.frame_time_ms_) + " ms (" +
                         std::to_string(1000.0f / stats.frame_time_ms_) + " FPS)");
-            Logger::info("  G-Buffer: " + std::to_string(stats.gbuffer_time_ms_) + " ms");
-            Logger::info("  Ray trace: " + std::to_string(stats.raytrace_time_ms_) + " ms");
-            Logger::info("  Triangles: " + std::to_string(stats.triangle_count_));
+            ARE_LOG_INFO("  G-Buffer: " + std::to_string(stats.gbuffer_time_ms_) + " ms");
+            ARE_LOG_INFO("  Ray trace: " + std::to_string(stats.raytrace_time_ms_) + " ms");
+            ARE_LOG_INFO("  Triangles: " + std::to_string(stats.triangle_count_));
         }
         
         // ESC to exit
@@ -382,12 +382,12 @@ void render_loop() {
         }
     }
     
-    Logger::info("Exiting render loop");
+    ARE_LOG_INFO("Exiting render loop");
 }
 
 /// @brief Cleanup
 void cleanup() {
-    Logger::info("Cleaning up...");
+    ARE_LOG_INFO("Cleaning up...");
     
     if (g_renderer) {
         g_renderer->shutdown();
@@ -401,44 +401,43 @@ void cleanup() {
         glfwTerminate();
     }
     
-    Logger::info("Cleanup complete");
+    ARE_LOG_INFO("Cleanup complete");
 }
 
 int main() {
     // Initialize logger
-    Logger::initialize();
-    Logger::info("===========================================");
-    Logger::info("Aurora Rendering Engine - Cornell Box Demo");
-    Logger::info("===========================================");
+    ARE_LOG_INFO("===========================================");
+    ARE_LOG_INFO("Aurora Rendering Engine - Cornell Box Demo");
+    ARE_LOG_INFO("===========================================");
     
     // Check environment
     const char* display = getenv("DISPLAY");
     const char* wayland_display = getenv("WAYLAND_DISPLAY");
     
     if (!display && !wayland_display) {
-        Logger::error("No display server detected!");
-        Logger::error("Make sure you're running in a graphical environment (X11 or Wayland)");
-        Logger::error("DISPLAY=" + std::string(display ? display : "not set"));
-        Logger::error("WAYLAND_DISPLAY=" + std::string(wayland_display ? wayland_display : "not set"));
+        ARE_LOG_ERROR("No display server detected!");
+        ARE_LOG_ERROR("Make sure you're running in a graphical environment (X11 or Wayland)");
+        ARE_LOG_ERROR("DISPLAY=" + std::string(display ? display : "not set"));
+        ARE_LOG_ERROR("WAYLAND_DISPLAY=" + std::string(wayland_display ? wayland_display : "not set"));
         return -1;
     }
     
-    Logger::info("Display server: " + std::string(display ? display : wayland_display));
+    ARE_LOG_INFO("Display server: " + std::string(display ? display : wayland_display));
     
     // Initialize window
     if (!init_window()) {
         cleanup();
-        Logger::error("Failed to initialize window");
+        ARE_LOG_ERROR("Failed to initialize window");
         Logger::shutdown();
         return -1;
     }
     
     // Setup scene
-    Logger::info("Setting up Cornell Box scene...");
+    ARE_LOG_INFO("Setting up Cornell Box scene...");
     setup_cornell_box();
     
     // Initialize renderer
-    Logger::info("Initializing renderer...");
+    ARE_LOG_INFO("Initializing renderer...");
     RendererConfig config;
     config.width_ = WINDOW_WIDTH;
     config.height_ = WINDOW_HEIGHT;
@@ -449,16 +448,16 @@ int main() {
     
     g_renderer = std::make_unique<Renderer>(config);
     if (!g_renderer->initialize()) {
-        Logger::error("Failed to initialize renderer");
+        ARE_LOG_ERROR("Failed to initialize renderer");
         cleanup();
         Logger::shutdown();
         return -1;
     }
     
-    Logger::info("===========================================");
-    Logger::info("Renderer initialized successfully!");
-    Logger::info("Press ESC to exit");
-    Logger::info("===========================================");
+    ARE_LOG_INFO("===========================================");
+    ARE_LOG_INFO("Renderer initialized successfully!");
+    ARE_LOG_INFO("Press ESC to exit");
+    ARE_LOG_INFO("===========================================");
     
     // Main loop
     render_loop();
@@ -466,7 +465,7 @@ int main() {
     // Cleanup
     cleanup();
     
-    Logger::info("Cornell Box demo finished");
+    ARE_LOG_INFO("Cornell Box demo finished");
     Logger::shutdown();
     
     return 0;

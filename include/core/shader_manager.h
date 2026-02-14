@@ -58,11 +58,16 @@ public:
     /// @return Denoise shader (nullptr if not loaded)
     const std::shared_ptr<Shader>& get_denoise_shader() const { return denoise_shader_; }
 
+	/// @brief Get screen bliting shader
+    /// @return Screen bliting shader (nullptr if not loaded)
+    const std::shared_ptr<Shader>& get_screen_blit_shader() const { return screen_blit_shader_; }
+
 private:
 	std::unordered_map<std::string, std::shared_ptr<Shader>> shader_cache_;
 	std::shared_ptr<Shader> gbuffer_shader_;
 	std::shared_ptr<Shader> raytracing_shader_;
 	std::shared_ptr<Shader> denoise_shader_;
+	std::shared_ptr<Shader> screen_blit_shader_;
     
     bool initialized_;
     

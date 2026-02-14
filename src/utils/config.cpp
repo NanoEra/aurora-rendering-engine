@@ -20,7 +20,7 @@ static std::string trim(const std::string& str) {
 bool Config::load(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        Logger::error("Failed to open config file: " + path);
+        ARE_LOG_ERROR("Failed to open config file: " + path);
         return false;
     }
     
@@ -58,14 +58,14 @@ bool Config::load(const std::string& path) {
         }
     }
     
-    Logger::info("Config loaded: " + path + " (" + std::to_string(g_config_map.size()) + " entries)");
+    ARE_LOG_INFO("Config loaded: " + path + " (" + std::to_string(g_config_map.size()) + " entries)");
     return true;
 }
 
 bool Config::save(const std::string& path) {
     std::ofstream file(path);
     if (!file.is_open()) {
-        Logger::error("Failed to open config file for writing: " + path);
+        ARE_LOG_ERROR("Failed to open config file for writing: " + path);
         return false;
     }
     
@@ -73,7 +73,7 @@ bool Config::save(const std::string& path) {
         file << pair.first << "=" << pair.second << std::endl;
     }
     
-    Logger::info("Config saved: " + path);
+    ARE_LOG_INFO("Config saved: " + path);
     return true;
 }
 
@@ -91,7 +91,7 @@ int Config::get_int(const std::string& key, int default_value) {
         try {
             return std::stoi(it->second);
         } catch (...) {
-            Logger::warning("Failed to parse int for key: " + key);
+            ARE_LOG_WARN("Failed to parse int for key: " + key);
         }
     }
     return default_value;
@@ -103,7 +103,7 @@ float Config::get_float(const std::string& key, float default_value) {
         try {
             return std::stof(it->second);
         } catch (...) {
-            Logger::warning("Failed to parse float for key: " + key);
+            ARE_LOG_WARN("Failed to parse float for key: " + key);
         }
     }
     return default_value;

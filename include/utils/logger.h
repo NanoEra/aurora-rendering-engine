@@ -1,61 +1,74 @@
-#ifndef ARE_INCLUDE_UTILS_LOGGER_H
-#define ARE_INCLUDE_UTILS_LOGGER_H
+#ifndef ARE_INCLUDE_CORE_LOGGER_H
+#define ARE_INCLUDE_CORE_LOGGER_H
 
 #include <string>
+#include <memory>
 
 namespace are {
 
-/// @brief Log level enumeration
+/**
+ * @enum LogLevel
+ * @brief Logging severity levels
+ */
 enum class LogLevel {
-    DEBUG,
-    INFO,
-    WARNING,
-    ERROR,
-    FATAL
+    ARE_LOG_TRACE,
+    ARE_LOG_DEBUG,
+    ARE_LOG_INFO,
+    ARE_LOG_WARN,
+    ARE_LOG_ERROR,
+    ARE_LOG_CRITICAL
 };
 
-/// @brief Logger interface for engine logging
-/// @note This module should be implemented by the user
+/**
+ * @class Logger
+ * @brief Thread-safe logging system
+ * 
+ * This class provides a simple interface for logging messages with different
+ * severity levels. It wraps spdlog for actual logging functionality.
+ */
 class Logger {
 public:
-    /// @brief Initialize logger
-    /// @param log_file Log file path (empty for console only)
-    /// @return True if initialization succeeded
-    static bool initialize(const std::string& log_file = "");
-    
-    /// @brief Shutdown logger
+    /**
+     * @brief Initialize the logging system
+     * @param min_level Minimum log level to display
+     */
+    static void init(LogLevel min_level = LogLevel::ARE_LOG_INFO);
+
+    /**
+     * @brief Shutdown the logging system
+     */
     static void shutdown();
-    
-    /// @brief Log message
-    /// @param level Log level
-    /// @param message Message content
-    static void log(LogLevel level, const std::string& message);
-    
-    /// @brief Log debug message
-    /// @param message Message content
-    static void debug(const std::string& message);
-    
-    /// @brief Log info message
-    /// @param message Message content
-    static void info(const std::string& message);
-    
-    /// @brief Log warning message
-    /// @param message Message content
-    static void warning(const std::string& message);
-    
-    /// @brief Log error message
-    /// @param message Message content
-    static void error(const std::string& message);
-    
-    /// @brief Log fatal message
-    /// @param message Message content
-    static void fatal(const std::string& message);
-    
-    /// @brief Set minimum log level
-    /// @param level Minimum level to log
+
+    /**
+     * @brief Log a message with file/function/line information
+     * @param level Log severity level
+     * @param file Source file name
+     * @param func Function name
+     * @param line Line number
+     * @param message Log message
+     */
+    static void log(LogLevel level, const char* file, const char* func, 
+                   int line, const std::string& message);
+
+    /**
+     * @brief Set minimum log level
+     * @param level Minimum log level to display
+     */
     static void set_level(LogLevel level);
+
+private:
+    static std::shared_ptr<void> logger_impl_; ///< Internal logger implementation
+    static bool initialized_;                   ///< Initialization flag
 };
 
 } // namespace are
 
-#endif // ARE_INCLUDE_UTILS_LOGGER_H
+// Logging macros
+#define ARE_LOG_TRACE(msg)    are::Logger::log(are::LogLevel::ARE_LOG_TRACE, __FILE__, __func__, __LINE__, msg)
+#define ARE_LOG_DEBUG(msg)    are::Logger::log(are::LogLevel::ARE_LOG_DEBUG, __FILE__, __func__, __LINE__, msg)
+#define ARE_LOG_INFO(msg)     are::Logger::log(are::LogLevel::ARE_LOG_INFO, __FILE__, __func__, __LINE__, msg)
+#define ARE_LOG_WARN(msg)     are::Logger::log(are::LogLevel::ARE_LOG_WARN, __FILE__, __func__, __LINE__, msg)
+#define ARE_LOG_ERROR(msg)    are::Logger::log(are::LogLevel::ARE_LOG_ERROR, __FILE__, __func__, __LINE__, msg)
+#define ARE_LOG_CRITICAL(msg) are::Logger::log(are::LogLevel::ARE_LOG_CRITICAL, __FILE__, __func__, __LINE__, msg)
+
+#endif // ARE_INCLUDE_CORE_LOGGER_H

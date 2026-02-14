@@ -144,7 +144,7 @@ bool Texture::load_from_file(const std::string& path, bool generate_mipmaps) {
     unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 0);
     
     if (!data) {
-        Logger::error("Failed to load texture: " + path);
+        ARE_LOG_ERROR("Failed to load texture: " + path);
         return false;
     }
     
@@ -156,7 +156,7 @@ bool Texture::load_from_file(const std::string& path, bool generate_mipmaps) {
         case 3: format = TextureFormat::RGB8; break;
         case 4: format = TextureFormat::RGBA8; break;
         default:
-            Logger::error("Unsupported channel count: " + std::to_string(channels));
+            ARE_LOG_ERROR("Unsupported channel count: " + std::to_string(channels));
             stbi_image_free(data);
             return false;
     }
@@ -181,13 +181,13 @@ bool Texture::load_from_file(const std::string& path, bool generate_mipmaps) {
         this->generate_mipmaps();
     }
     
-    Logger::info("Texture loaded successfully: " + path);
+    ARE_LOG_INFO("Texture loaded successfully: " + path);
     return true;
 }
 
 bool Texture::create(uint width, uint height, TextureFormat format) {
     if (handle_ != INVALID_HANDLE) {
-        Logger::warning("Texture already created, releasing old texture");
+        ARE_LOG_WARN("Texture already created, releasing old texture");
         release();
     }
     
@@ -217,12 +217,12 @@ bool Texture::create(uint width, uint height, TextureFormat format) {
 
 bool Texture::upload(const void* data, uint width, uint height, TextureFormat format) {
     if (handle_ == INVALID_HANDLE) {
-        Logger::error("Cannot upload to invalid texture");
+        ARE_LOG_ERROR("Cannot upload to invalid texture");
         return false;
     }
     
     if (width != width_ || height != height_ || format != format_) {
-        Logger::warning("Upload parameters differ from texture creation, recreating texture");
+        ARE_LOG_WARN("Upload parameters differ from texture creation, recreating texture");
         create(width, height, format);
     }
     
@@ -240,7 +240,7 @@ bool Texture::upload(const void* data, uint width, uint height, TextureFormat fo
 
 void Texture::set_filter(TextureFilter min_filter, TextureFilter mag_filter) {
     if (handle_ == INVALID_HANDLE) {
-        Logger::error("Cannot set filter on invalid texture");
+        ARE_LOG_ERROR("Cannot set filter on invalid texture");
         return;
     }
     
@@ -252,7 +252,7 @@ void Texture::set_filter(TextureFilter min_filter, TextureFilter mag_filter) {
 
 void Texture::set_wrap(TextureWrap wrap_s, TextureWrap wrap_t) {
     if (handle_ == INVALID_HANDLE) {
-        Logger::error("Cannot set wrap mode on invalid texture");
+        ARE_LOG_ERROR("Cannot set wrap mode on invalid texture");
         return;
     }
     
@@ -264,7 +264,7 @@ void Texture::set_wrap(TextureWrap wrap_s, TextureWrap wrap_t) {
 
 void Texture::generate_mipmaps() {
     if (handle_ == INVALID_HANDLE) {
-        Logger::error("Cannot generate mipmaps for invalid texture");
+        ARE_LOG_ERROR("Cannot generate mipmaps for invalid texture");
         return;
     }
     
@@ -277,7 +277,7 @@ void Texture::generate_mipmaps() {
 
 void Texture::bind(uint unit) const {
     if (handle_ == INVALID_HANDLE) {
-        Logger::warning("Attempting to bind invalid texture");
+        ARE_LOG_WARN("Attempting to bind invalid texture");
         return;
     }
     

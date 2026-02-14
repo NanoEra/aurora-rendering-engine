@@ -21,7 +21,7 @@ GBuffer::~GBuffer() {
 
 bool GBuffer::initialize() {
     if (initialized_) {
-        Logger::warning("GBuffer already initialized");
+        ARE_LOG_WARN("GBuffer already initialized");
         return true;
     }
 
@@ -68,7 +68,7 @@ bool GBuffer::initialize() {
     glDrawBuffers(GBUFFER_COUNT, draw_buffers);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        Logger::error("GBuffer framebuffer is not complete");
+        ARE_LOG_ERROR("GBuffer framebuffer is not complete");
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         return false;
     }
@@ -76,7 +76,7 @@ bool GBuffer::initialize() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     initialized_ = true;
-    Logger::info("GBuffer initialized successfully");
+    ARE_LOG_INFO("GBuffer initialized successfully");
     return true;
 }
 
@@ -101,7 +101,7 @@ void GBuffer::release() {
     }
 
     initialized_ = false;
-    Logger::info("GBuffer released");
+    ARE_LOG_INFO("GBuffer released");
 }
 
 TextureHandle GBuffer::create_texture_(uint internal_format, uint format, uint type) {
@@ -118,7 +118,7 @@ TextureHandle GBuffer::create_texture_(uint internal_format, uint format, uint t
 
 void GBuffer::render(const Scene& scene, const Shader& shader) {
     if (!initialized_) {
-        Logger::error("GBuffer not initialized");
+        ARE_LOG_ERROR("GBuffer not initialized");
         return;
     }
     
@@ -151,7 +151,7 @@ void GBuffer::render(const Scene& scene, const Shader& shader) {
     
     for (const auto& mesh : meshes) {
         if (!mesh->is_uploaded()) {
-            Logger::warning("Mesh not uploaded to GPU, skipping");
+            ARE_LOG_WARN("Mesh not uploaded to GPU, skipping");
             continue;
         }
         
@@ -216,7 +216,7 @@ void GBuffer::resize(uint width, uint height) {
 
 TextureHandle GBuffer::get_texture(int index) const {
     if (index < 0 || index >= GBUFFER_COUNT) {
-        Logger::error("Invalid G-Buffer texture index");
+        ARE_LOG_ERROR("Invalid G-Buffer texture index");
         return INVALID_HANDLE;
     }
     return textures_[index];

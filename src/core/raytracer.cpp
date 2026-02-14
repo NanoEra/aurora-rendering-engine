@@ -39,7 +39,7 @@ RayTracer::~RayTracer() {
 
 bool RayTracer::initialize() {
 	if (initialized_) {
-		Logger::warning("RayTracer already initialized");
+		ARE_LOG_WARN("RayTracer already initialized");
 		return true;
 	}
 
@@ -62,7 +62,7 @@ bool RayTracer::initialize() {
 	}
 
 	initialized_ = true;
-	Logger::info("RayTracer initialized successfully");
+	ARE_LOG_INFO("RayTracer initialized successfully");
 	return true;
 }
 
@@ -92,12 +92,12 @@ void RayTracer::release() {
 	bvh_built_ = false;
 
 	initialized_ = false;
-	Logger::info("RayTracer released");
+	ARE_LOG_INFO("RayTracer released");
 }
 
 bool RayTracer::rebuild_bvh(const Scene &scene) {
 	if (!config_.use_bvh_) {
-		Logger::warning("BVH is disabled in configuration");
+		ARE_LOG_WARN("BVH is disabled in configuration");
 		return false;
 	}
 
@@ -105,32 +105,32 @@ bool RayTracer::rebuild_bvh(const Scene &scene) {
 		bvh_ = std::make_unique<BVH>();
 	}
 
-	Logger::info("Building BVH for ray tracing...");
+	ARE_LOG_INFO("Building BVH for ray tracing...");
 
 	if (!bvh_->build(scene.get_meshes())) {
-		Logger::error("Failed to build BVH");
+		ARE_LOG_ERROR("Failed to build BVH");
 		return false;
 	}
 
 	if (!bvh_->upload_to_gpu(bvh_node_buffer_, bvh_triangle_buffer_)) {
-		Logger::error("Failed to upload BVH to GPU");
+		ARE_LOG_ERROR("Failed to upload BVH to GPU");
 		return false;
 	}
 
 	bvh_built_ = true;
 	reset_accumulation();
-	Logger::info("BVH built and uploaded successfully");
+	ARE_LOG_INFO("BVH built and uploaded successfully");
 	return true;
 }
 
 void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle output_texture) {
 	if (!initialized_) {
-		Logger::error("RayTracer not initialized");
+		ARE_LOG_ERROR("RayTracer not initialized");
 		return;
 	}
 
 	if (!compute_shader_->is_valid()) {
-		Logger::error("Ray tracing compute shader not loaded");
+		ARE_LOG_ERROR("Ray tracing compute shader not loaded");
 		return;
 	}
 
@@ -144,7 +144,7 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 
 	// Use compute shader
 	if (!compute_shader_ || !compute_shader_->is_valid()) {
-		Logger::error("Ray tracing compute shader not set or invalid");
+		ARE_LOG_ERROR("Ray tracing compute shader not set or invalid");
 		return;
 	}
 	compute_shader_->use();
@@ -347,7 +347,7 @@ void RayTracer::bind_gbuffer_(const GBuffer &gbuffer) {
 
 void RayTracer::set_compute_shader(const std::shared_ptr<Shader> &shader) {
 	compute_shader_ = shader;
-	Logger::info("Compute shader set for RayTracer");
+	ARE_LOG_INFO("Compute shader set for RayTracer");
 }
 
 } // namespace are

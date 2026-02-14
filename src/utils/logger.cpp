@@ -1,103 +1,159 @@
 #include "utils/logger.h"
-#include <iostream>
-#include <fstream>
-#include <ctime>
-#include <iomanip>
-#include <sstream>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <mutex>
+#include <cstring>
 
 namespace are {
 
-// Static members
-static LogLevel g_min_level = LogLevel::DEBUG;
-static std::ofstream g_log_file;
-static bool g_initialized = false;
+std::shared_ptr<void> Logger::logger_impl_ = nullptr;
+bool Logger::initialized_ = false;
 
-bool Logger::initialize(const std::string& log_file) {
-    if (g_initialized) {
-        return true;
+void Logger::init(LogLevel min_level) {
+    if (initialized_) {
+        return;
     }
-    
-    if (!log_file.empty()) {
-        g_log_file.open(log_file, std::ios::out | std::ios::app);
-        if (!g_log_file.is_open()) {
-            std::cerr << "Failed to open log file: " << log_file << std::endl;
-            return false;
+
+    try {
+        // Create console sink with color support
+        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        console_sink->set_pattern("[%H:%M:%S.%e] [%^%l%$] %v");
+
+        // Create logger with console sink
+        auto logger = std::make_shared<spdlog::logger>("are", console_sink);
+        
+        // Set log level
+        switch (min_level) {
+            case LogLevel::ARE_LOG_TRACE:    
+                logger->set_level(spdlog::level::trace); 
+                break;
+            case LogLevel::ARE_LOG_DEBUG:    
+                logger->set_level(spdlog::level::debug); 
+                break;
+            case LogLevel::ARE_LOG_INFO:     
+                logger->set_level(spdlog::level::info); 
+                break;
+            case LogLevel::ARE_LOG_WARN:     
+                logger->set_level(spdlog::level::warn); 
+                break;
+            case LogLevel::ARE_LOG_ERROR:    
+                logger->set_level(spdlog::level::err); 
+                break;
+            case LogLevel::ARE_LOG_CRITICAL: 
+                logger->set_level(spdlog::level::critical); 
+                break;
         }
+
+        // Flush on error or higher
+        logger->flush_on(spdlog::level::err);
+
+        // Set as default logger
+        spdlog::set_default_logger(logger);
+        logger_impl_ = logger;
+        initialized_ = true;
+
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[ARE] Failed to initialize logger: %s\n", e.what());
     }
-    
-    g_initialized = true;
-    return true;
 }
 
 void Logger::shutdown() {
-    if (g_log_file.is_open()) {
-        g_log_file.close();
+    if (!initialized_) {
+        return;
     }
-    g_initialized = false;
-}
 
-static std::string get_current_time() {
-    auto now = std::time(nullptr);
-    auto tm = *std::localtime(&now);
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%H:%M:%S");
-    return oss.str();
-}
-
-static std::string level_to_string(LogLevel level) {
-    switch (level) {
-        case LogLevel::DEBUG: return "DEBUG";
-        case LogLevel::INFO: return "INFO";
-        case LogLevel::WARNING: return "WARN";
-        case LogLevel::ERROR: return "ERROR";
-        case LogLevel::FATAL: return "FATAL";
-        default: return "UNKNOWN";
+    try {
+        spdlog::shutdown();
+        logger_impl_.reset();
+        initialized_ = false;
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[ARE] Error during logger shutdown: %s\n", e.what());
     }
 }
 
-void Logger::log(LogLevel level, const std::string& message) {
-    if (level < g_min_level) return;
+void Logger::log(LogLevel level, const char* file, const char* func, 
+                int line, const std::string& message) {
+    if (!initialized_) {
+        init();
+    }
+
+    // Extract filename from full path
+    const char* filename = file;
+    const char* last_slash = nullptr;
     
-    std::string time_str = get_current_time();
-    std::string level_str = level_to_string(level);
-    std::string formatted = "[" + time_str + "] [" + level_str + "] " + message;
-    
-    // Console output
-    if (level >= LogLevel::ERROR) {
-        std::cerr << formatted << std::endl;
-    } else {
-        std::cout << formatted << std::endl;
+    for (const char* p = file; *p; ++p) {
+        if (*p == '/' || *p == '\\') {
+            last_slash = p;
+        }
     }
     
-    // File output
-    if (g_log_file.is_open()) {
-        g_log_file << formatted << std::endl;
-        g_log_file.flush();
+    if (last_slash) {
+        filename = last_slash + 1;
     }
-}
 
-void Logger::debug(const std::string& message) {
-    log(LogLevel::DEBUG, message);
-}
+    // Format message with location information
+    std::string formatted = message + " (" + filename + "-" + func + "():" + std::to_string(line) + ")";
 
-void Logger::info(const std::string& message) {
-    log(LogLevel::INFO, message);
-}
-
-void Logger::warning(const std::string& message) {
-    log(LogLevel::WARNING, message);
-}
-
-void Logger::error(const std::string& message) {
-    log(LogLevel::ERROR, message);
-}
-
-void Logger::fatal(const std::string& message) {
-    log(LogLevel::FATAL, message);
+    try {
+        auto logger = std::static_pointer_cast<spdlog::logger>(logger_impl_);
+        
+        switch (level) {
+            case LogLevel::ARE_LOG_TRACE:
+                logger->trace(formatted);
+                break;
+            case LogLevel::ARE_LOG_DEBUG:
+                logger->debug(formatted);
+                break;
+            case LogLevel::ARE_LOG_INFO:
+                logger->info(formatted);
+                break;
+            case LogLevel::ARE_LOG_WARN:
+                logger->warn(formatted);
+                break;
+            case LogLevel::ARE_LOG_ERROR:
+                logger->error(formatted);
+                break;
+            case LogLevel::ARE_LOG_CRITICAL:
+                logger->critical(formatted);
+                break;
+        }
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[ARE] Logging error: %s\n", e.what());
+    }
 }
 
 void Logger::set_level(LogLevel level) {
-    g_min_level = level;
+    if (!initialized_) {
+        return;
+    }
+
+    try {
+        auto logger = std::static_pointer_cast<spdlog::logger>(logger_impl_);
+        
+        switch (level) {
+            case LogLevel::ARE_LOG_TRACE:    
+                logger->set_level(spdlog::level::trace); 
+                break;
+            case LogLevel::ARE_LOG_DEBUG:    
+                logger->set_level(spdlog::level::debug); 
+                break;
+            case LogLevel::ARE_LOG_INFO:     
+                logger->set_level(spdlog::level::info); 
+                break;
+            case LogLevel::ARE_LOG_WARN:     
+                logger->set_level(spdlog::level::warn); 
+                break;
+            case LogLevel::ARE_LOG_ERROR:    
+                logger->set_level(spdlog::level::err); 
+                break;
+            case LogLevel::ARE_LOG_CRITICAL: 
+                logger->set_level(spdlog::level::critical); 
+                break;
+        }
+    } catch (const std::exception& e) {
+        fprintf(stderr, "[ARE] Error setting log level: %s\n", e.what());
+    }
 }
 
 } // namespace are

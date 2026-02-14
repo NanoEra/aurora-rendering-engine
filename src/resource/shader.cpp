@@ -39,7 +39,7 @@ bool Shader::load(const std::string& vertex_path, const std::string& fragment_pa
     std::string fragment_source = read_file_(fragment_path);
     
     if (vertex_source.empty() || fragment_source.empty()) {
-        Logger::error("Failed to read shader files");
+        ARE_LOG_ERROR("Failed to read shader files");
         return false;
     }
     
@@ -50,7 +50,7 @@ bool Shader::load_compute(const std::string& compute_path) {
     std::string compute_source = read_file_(compute_path);
     
     if (compute_source.empty()) {
-        Logger::error("Failed to read compute shader file");
+        ARE_LOG_ERROR("Failed to read compute shader file");
         return false;
     }
     
@@ -148,7 +148,7 @@ int Shader::get_uniform_location_(const std::string& name) const {  // 改为con
     uniform_cache_[name] = location;  // mutable允许修改
     
     if (location == -1) {
-        Logger::warning("Uniform '" + name + "' not found in shader");
+        ARE_LOG_WARN("Uniform '" + name + "' not found in shader");
     }
     
     return location;
@@ -168,7 +168,7 @@ uint Shader::compile_shader_(const std::string& source, uint type) {
         
         std::string type_str = (type == GL_VERTEX_SHADER) ? "VERTEX" :
                               (type == GL_FRAGMENT_SHADER) ? "FRAGMENT" : "COMPUTE";
-        Logger::error("Shader compilation failed (" + type_str + "): " + std::string(info_log));
+        ARE_LOG_ERROR("Shader compilation failed (" + type_str + "): " + std::string(info_log));
         
         glDeleteShader(shader);
         return 0;
@@ -191,7 +191,7 @@ bool Shader::link_program_(const uint* shaders, uint count) {
     if (!success) {
         char info_log[512];
         glGetProgramInfoLog(handle_, 512, nullptr, info_log);
-        Logger::error("Shader linking failed: " + std::string(info_log));
+        ARE_LOG_ERROR("Shader linking failed: " + std::string(info_log));
         
         glDeleteProgram(handle_);
         handle_ = INVALID_HANDLE;
@@ -204,7 +204,7 @@ bool Shader::link_program_(const uint* shaders, uint count) {
 std::string Shader::read_file_(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        Logger::error("Failed to open file: " + path);
+        ARE_LOG_ERROR("Failed to open file: " + path);
         return "";
     }
     

@@ -61,7 +61,7 @@ Buffer::~Buffer() {
 
 bool Buffer::create(BufferType type, size_t size, const void* data, BufferUsage usage) {
     if (handle_ != INVALID_HANDLE) {
-        Logger::warning("Buffer already created, releasing old buffer");
+        ARE_LOG_WARN("Buffer already created, releasing old buffer");
         release();
     }
     
@@ -78,18 +78,18 @@ bool Buffer::create(BufferType type, size_t size, const void* data, BufferUsage 
     glBufferData(gl_type, size, data, gl_usage);
     glBindBuffer(gl_type, 0);
     
-    Logger::info("Buffer created successfully");
+    ARE_LOG_INFO("Buffer created successfully");
     return true;
 }
 
 void Buffer::update(size_t offset, size_t size, const void* data) {
     if (handle_ == INVALID_HANDLE) {
-        Logger::error("Cannot update invalid buffer");
+        ARE_LOG_ERROR("Cannot update invalid buffer");
         return;
     }
     
     if (offset + size > size_) {
-        Logger::error("Buffer update out of bounds");
+        ARE_LOG_ERROR("Buffer update out of bounds");
         return;
     }
     
@@ -102,7 +102,7 @@ void Buffer::update(size_t offset, size_t size, const void* data) {
 
 void Buffer::bind() const {
     if (handle_ == INVALID_HANDLE) {
-        Logger::warning("Attempting to bind invalid buffer");
+        ARE_LOG_WARN("Attempting to bind invalid buffer");
         return;
     }
     
@@ -112,7 +112,7 @@ void Buffer::bind() const {
 
 void Buffer::bind_base(uint binding_point) const {
     if (handle_ == INVALID_HANDLE) {
-        Logger::warning("Attempting to bind invalid buffer");
+        ARE_LOG_WARN("Attempting to bind invalid buffer");
         return;
     }
     

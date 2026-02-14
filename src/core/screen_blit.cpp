@@ -43,13 +43,13 @@ ScreenBlit::~ScreenBlit() {
 
 bool ScreenBlit::initialize() {
     if (initialized_) {
-        Logger::warning("ScreenBlit already initialized");
+        ARE_LOG_WARN("ScreenBlit already initialized");
         return true;
     }
     
     // Compile shader
     if (!shader_.compile(VERTEX_SHADER_SOURCE, FRAGMENT_SHADER_SOURCE)) {
-        Logger::error("Failed to compile screen blit shader");
+        ARE_LOG_ERROR("Failed to compile screen blit shader");
         return false;
     }
     
@@ -57,7 +57,7 @@ bool ScreenBlit::initialize() {
     create_quad_();
     
     initialized_ = true;
-    Logger::info("ScreenBlit initialized successfully");
+    ARE_LOG_INFO("ScreenBlit initialized successfully");
     return true;
 }
 
@@ -81,7 +81,7 @@ void ScreenBlit::release() {
 
 void ScreenBlit::blit(TextureHandle texture, int x, int y, uint width, uint height) {
     if (!initialized_) {
-        Logger::error("ScreenBlit not initialized");
+        ARE_LOG_ERROR("ScreenBlit not initialized");
         return;
     }
     

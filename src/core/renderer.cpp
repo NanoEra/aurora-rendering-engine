@@ -17,23 +17,23 @@ Renderer::~Renderer() {
 
 bool Renderer::initialize() {
     if (initialized_) {
-        Logger::warning("Renderer already initialized");
+        ARE_LOG_WARN("Renderer already initialized");
         return true;
     }
     
-    Logger::info("Initializing Aurora Rendering Engine...");
+    ARE_LOG_INFO("Initializing Aurora Rendering Engine...");
     
     // Initialize shader manager
     shader_manager_ = std::make_unique<ShaderManager>();
     if (!shader_manager_->initialize()) {
-        Logger::error("Failed to initialize shader manager");
+        ARE_LOG_ERROR("Failed to initialize shader manager");
         return false;
     }
     
     // Initialize G-Buffer
     gbuffer_ = std::make_unique<GBuffer>(config_.width_, config_.height_);
     if (!gbuffer_->initialize()) {
-        Logger::error("Failed to initialize G-Buffer");
+        ARE_LOG_ERROR("Failed to initialize G-Buffer");
         return false;
     }
     
@@ -48,14 +48,14 @@ bool Renderer::initialize() {
     
     raytracer_ = std::make_unique<RayTracer>(config_.width_, config_.height_, rt_config);
     if (!raytracer_->initialize()) {
-        Logger::error("Failed to initialize ray tracer");
+        ARE_LOG_ERROR("Failed to initialize ray tracer");
         return false;
     }
     
     // Pass compute shader to ray tracer
 	const auto& rt_shader = shader_manager_->get_raytracing_shader();
 	if (!rt_shader || !rt_shader->is_valid()) {
-		Logger::error("Ray tracing shader is invalid");
+		ARE_LOG_ERROR("Ray tracing shader is invalid");
 		return false;
 	}
 	raytracer_->set_compute_shader(rt_shader);
@@ -63,19 +63,19 @@ bool Renderer::initialize() {
     // Initialize screen blit
     screen_blit_ = std::make_unique<ScreenBlit>();
     if (!screen_blit_->initialize()) {
-        Logger::error("Failed to initialize screen blit");
+        ARE_LOG_ERROR("Failed to initialize screen blit");
         return false;
     }
 
 	denoiser_ = std::make_unique<Denoiser>(config_.width_, config_.height_);
 	const auto& denoise_shader = shader_manager_->get_denoise_shader();
 	if (!denoiser_->initialize(denoise_shader)) {
-		Logger::error("Failed to initialize denoiser");
+		ARE_LOG_ERROR("Failed to initialize denoiser");
 		return false;
 	}
     
     initialized_ = true;
-    Logger::info("Aurora Rendering Engine initialized successfully");
+    ARE_LOG_INFO("Aurora Rendering Engine initialized successfully");
     return true;
 }
 
@@ -83,7 +83,7 @@ void Renderer::shutdown() {
 	if (!initialized_)
 		return;
 
-	Logger::info("Shutting down Aurora Rendering Engine...");
+	ARE_LOG_INFO("Shutting down Aurora Rendering Engine...");
 
 	if (screen_blit_) {
         screen_blit_->release();
@@ -111,14 +111,14 @@ void Renderer::shutdown() {
 	}
 
 	initialized_ = false;
-	Logger::info("Aurora Rendering Engine shut down");
+	ARE_LOG_INFO("Aurora Rendering Engine shut down");
 }
 
 RenderStats Renderer::render(const Scene& scene, TextureHandle output_texture) {
     RenderStats stats = {};
     
     if (!initialized_) {
-        Logger::error("Renderer not initialized");
+        ARE_LOG_ERROR("Renderer not initialized");
         return stats;
     }
     
@@ -130,7 +130,7 @@ RenderStats Renderer::render(const Scene& scene, TextureHandle output_texture) {
     
 	const auto& gbuffer_shader = shader_manager_->get_gbuffer_shader();
 	if (!gbuffer_shader || !gbuffer_shader->is_valid()) {
-		Logger::error("G-Buffer shader is invalid");
+		ARE_LOG_ERROR("G-Buffer shader is invalid");
 		return stats;
 	}
 	gbuffer_->render(scene, *gbuffer_shader);
@@ -203,7 +203,7 @@ void Renderer::resize(uint width, uint height) {
 		raytracer_->resize(width, height);
 		denoiser_->resize(width, height);
 
-		Logger::info("Renderer resized to " + std::to_string(width) + "x" + std::to_string(height));
+		ARE_LOG_INFO("Renderer resized to " + std::to_string(width) + "x" + std::to_string(height));
 	}
 }
 

@@ -20,7 +20,7 @@ bool Denoiser::initialize(const std::shared_ptr<Shader>& shader) {
     if (initialized_) return true;
 
     if (!shader || !shader->is_valid()) {
-        Logger::error("Invalid denoise shader");
+        ARE_LOG_ERROR("Invalid denoise shader");
         return false;
     }
 
@@ -28,7 +28,7 @@ bool Denoiser::initialize(const std::shared_ptr<Shader>& shader) {
     create_output_texture_();
 
     initialized_ = true;
-    Logger::info("Denoiser initialized");
+    ARE_LOG_INFO("Denoiser initialized");
     return true;
 }
 

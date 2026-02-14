@@ -37,17 +37,17 @@ void Mesh::set_transform(const Mat4& transform) {
 
 bool Mesh::upload_to_gpu() {
     if (uploaded_) {
-        Logger::warning("Mesh already uploaded to GPU");
+        ARE_LOG_WARN("Mesh already uploaded to GPU");
         return true;
     }
     
     if (vertices_.empty()) {
-        Logger::error("Cannot upload mesh: no vertices");
+        ARE_LOG_ERROR("Cannot upload mesh: no vertices");
         return false;
     }
     
     if (indices_.empty()) {
-        Logger::error("Cannot upload mesh: no indices");
+        ARE_LOG_ERROR("Cannot upload mesh: no indices");
         return false;
     }
     
@@ -91,7 +91,7 @@ bool Mesh::upload_to_gpu() {
     glBindVertexArray(0);
     
     uploaded_ = true;
-    Logger::info("Mesh uploaded to GPU successfully");
+    ARE_LOG_INFO("Mesh uploaded to GPU successfully");
     return true;
 }
 

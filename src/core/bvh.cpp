@@ -49,7 +49,7 @@ BVH::~BVH() {
 bool BVH::build(const std::vector<std::shared_ptr<Mesh>>& meshes) {
     clear();
     
-    Logger::info("Building BVH...");
+    ARE_LOG_INFO("Building BVH...");
     
     // Extract all triangles from meshes
     for (const auto& mesh : meshes) {
@@ -88,7 +88,7 @@ bool BVH::build(const std::vector<std::shared_ptr<Mesh>>& meshes) {
     }
     
     if (triangles_.empty()) {
-        Logger::warning("No triangles to build BVH");
+        ARE_LOG_WARN("No triangles to build BVH");
         return false;
     }
     
@@ -107,7 +107,7 @@ bool BVH::build(const std::vector<std::shared_ptr<Mesh>>& meshes) {
     // Build BVH recursively
     build_recursive_(0, 0, static_cast<uint>(triangles_.size()));
     
-    Logger::info("BVH built: " + std::to_string(nodes_.size()) + " nodes, " +
+    ARE_LOG_INFO("BVH built: " + std::to_string(nodes_.size()) + " nodes, " +
                 std::to_string(triangles_.size()) + " triangles");
     
     return true;
@@ -260,7 +260,7 @@ AABB BVH::calculate_centroid_bounds_(uint first_prim, uint prim_count) {
 
 bool BVH::upload_to_gpu(Buffer& node_buffer, Buffer& triangle_buffer) {
     if (nodes_.empty() || triangles_.empty()) {
-        Logger::error("Cannot upload empty BVH to GPU");
+        ARE_LOG_ERROR("Cannot upload empty BVH to GPU");
         return false;
     }
 
@@ -307,7 +307,7 @@ bool BVH::upload_to_gpu(Buffer& node_buffer, Buffer& triangle_buffer) {
                             node_gpu.size() * sizeof(BVHNodeGpu),
                             node_gpu.data(),
                             BufferUsage::STATIC_DRAW)) {
-        Logger::error("Failed to upload BVH nodes to GPU");
+        ARE_LOG_ERROR("Failed to upload BVH nodes to GPU");
         return false;
     }
 
@@ -315,11 +315,11 @@ bool BVH::upload_to_gpu(Buffer& node_buffer, Buffer& triangle_buffer) {
                                 tri_gpu.size() * sizeof(TriangleGpu),
                                 tri_gpu.data(),
                                 BufferUsage::STATIC_DRAW)) {
-        Logger::error("Failed to upload BVH triangles to GPU");
+        ARE_LOG_ERROR("Failed to upload BVH triangles to GPU");
         return false;
     }
 
-    Logger::info("BVH uploaded to GPU successfully");
+    ARE_LOG_INFO("BVH uploaded to GPU successfully");
     return true;
 }
 

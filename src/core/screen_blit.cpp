@@ -14,11 +14,13 @@ ScreenBlit::~ScreenBlit() {
     release();
 }
 
-bool ScreenBlit::initialize() {
+bool ScreenBlit::initialize(const std::shared_ptr<Shader> &screen_blit_shader) {
     if (initialized_) {
         ARE_LOG_WARN("ScreenBlit already initialized");
         return true;
     }
+
+	shader_ = screen_blit_shader;
     
     // Create fullscreen quad
     create_quad_();

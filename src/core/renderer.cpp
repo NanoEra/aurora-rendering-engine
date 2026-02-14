@@ -46,23 +46,18 @@ bool Renderer::initialize() {
     rt_config.enable_accumulation_ = config_.enable_accumulation_;
     rt_config.use_bvh_ = true;
     
+	// Initialize ray tracer
     raytracer_ = std::make_unique<RayTracer>(config_.width_, config_.height_, rt_config);
-    if (!raytracer_->initialize()) {
+	const auto& rt_shader = shader_manager_->get_raytracing_shader();
+    if (!raytracer_->initialize(rt_shader)) {
         ARE_LOG_ERROR("Failed to initialize ray tracer");
         return false;
     }
-    
-    // Pass compute shader to ray tracer
-	const auto& rt_shader = shader_manager_->get_raytracing_shader();
-	if (!rt_shader || !rt_shader->is_valid()) {
-		ARE_LOG_ERROR("Ray tracing shader is invalid");
-		return false;
-	}
-	raytracer_->set_compute_shader(rt_shader);
 
     // Initialize screen blit
     screen_blit_ = std::make_unique<ScreenBlit>();
-    if (!screen_blit_->initialize()) {
+	const auto& screen_blit_shader = shader_manager_->get_screen_blit_shader();
+    if (!screen_blit_->initialize(screen_blit_shader)) {
         ARE_LOG_ERROR("Failed to initialize screen blit");
         return false;
     }

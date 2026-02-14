@@ -18,7 +18,7 @@ public:
     
     /// @brief Initialize screen blit
     /// @return True if initialization succeeded
-    bool initialize();
+    bool initialize(const std::shared_ptr<Shader> &screen_blit_shader);
     
     /// @brief Release resources
     void release();

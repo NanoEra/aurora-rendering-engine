@@ -35,7 +35,7 @@ public:
 
 	/// @brief Initialize ray tracer
 	/// @return True if initialization succeeded
-	bool initialize();
+	bool initialize(const std::shared_ptr<Shader> &shader);
 
 	/// @brief Release resources
 	void release();
@@ -68,10 +68,6 @@ public:
 	/// @param scene Scene to build BVH from
 	/// @return True if build succeeded
 	bool rebuild_bvh(const Scene &scene);
-
-	/// @brief Set compute shader (called by renderer)
-	/// @param shader Compute shader
-	void set_compute_shader(const std::shared_ptr<Shader> &shader);
 
 private:
 	uint width_;

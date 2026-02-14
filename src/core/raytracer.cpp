@@ -37,11 +37,13 @@ RayTracer::~RayTracer() {
 	release();
 }
 
-bool RayTracer::initialize() {
+bool RayTracer::initialize(const std::shared_ptr<Shader> &shader) {
 	if (initialized_) {
 		ARE_LOG_WARN("RayTracer already initialized");
 		return true;
 	}
+
+	compute_shader_ = shader;
 
 	// Create accumulation texture
 	glGenTextures(1, &accumulation_texture_);
@@ -343,11 +345,6 @@ void RayTracer::bind_gbuffer_(const GBuffer &gbuffer) {
 
 	glBindImageTexture(5, gbuffer.get_texture(GBUFFER_MATERIAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 	glBindImageTexture(6, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);
-}
-
-void RayTracer::set_compute_shader(const std::shared_ptr<Shader> &shader) {
-	compute_shader_ = shader;
-	ARE_LOG_INFO("Compute shader set for RayTracer");
 }
 
 } // namespace are

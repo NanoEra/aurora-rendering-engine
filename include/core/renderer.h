@@ -8,19 +8,10 @@
 #include "core/screen_blit.h"
 #include "core/shader_manager.h"
 #include "scene/scene.h"
+#include "utils/config.h"
 #include <memory>
 
 namespace are {
-
-// Main renderer configuration
-struct RendererConfig {
-	uint width_;
-	uint height_;
-	uint samples_per_pixel_;
-	uint max_ray_depth_;
-	bool enable_denoising_;
-	bool enable_accumulation_;
-};
 
 // Main rendering engine interface
 class Renderer {

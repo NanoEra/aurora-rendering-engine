@@ -3,64 +3,88 @@
 
 #include "basic/types.h"
 #include "resource/shader.h"
-#include <unordered_map>
-#include <string>
 #include <memory>
+#include <string>
+#include <unordered_map>
 
 namespace are {
 
-/// @brief Shader manager for loading and caching shaders
+// Shader manager for loading and caching shaders
 class ShaderManager {
 public:
-    /// @brief Constructor
-    ShaderManager();
-    
-    /// @brief Destructor
-    ~ShaderManager();
-    
-    /// @brief Initialize shader manager and load built-in shaders
-    /// @return True if initialization succeeded
-    bool initialize();
-    
-    /// @brief Release all shaders
-    void release();
-    
-    /// @brief Load shader from files
-    /// @param name Shader name for caching
-    /// @param vertex_path Vertex shader file path
-    /// @param fragment_path Fragment shader file path
-    /// @return Shader object
-	std::shared_ptr<Shader> load_shader(const std::string& name, 
-                      const std::string& vertex_path,
-                      const std::string& fragment_path);
-    
-    /// @brief Load compute shader from file
-    /// @param name Shader name for caching
-    /// @param compute_path Compute shader file path
-    /// @return Shader object
-    std::shared_ptr<Shader> load_compute_shader(const std::string& name,
-                              const std::string& compute_path);
-    
-    /// @brief Get cached shader by name
-    /// @param name Shader name
-    /// @return Shader object (invalid if not found)
-    std::shared_ptr<Shader> get_shader(const std::string& name) const;
-    
-    /// @brief Get G-Buffer shader
-    /// @return G-Buffer shader
-    const std::shared_ptr<Shader>& get_gbuffer_shader() const { return gbuffer_shader_; }
-    
-    /// @brief Get ray tracing compute shader
-    /// @return Ray tracing shader
-    const std::shared_ptr<Shader>& get_raytracing_shader() const { return raytracing_shader_; }
+	// Constructor
+	ShaderManager();
 
-	/// @brief Get mean denoise compute shader
-    /// @return Denoise shader (nullptr if not loaded)
-    const std::shared_ptr<Shader>& get_denoise_shader() const { return denoise_shader_; }
+	// Destructor
+	~ShaderManager();
 
-	/// @brief Get screen bliting shader
-    /// @return Screen bliting shader (nullptr if not loaded)
-    const std::shared_ptr<Shader>& get_screen_blit_shader() const { return screen_blit_shader_; }
+	/*
+	 * @brief Initialize shader manager and load built-in shaders
+	 * @return True if initialization succeeded
+	 */
+	bool initialize();
+
+	// Release all shaders
+	void release();
+
+	/*
+	 * @brief Load shader from files
+	 * @param name Shader name for caching
+	 * @param vertex_path Vertex shader file path
+	 * @param fragment_path Fragment shader file path
+	 * @return Shader object
+	 */
+	std::shared_ptr<Shader> load_shader(const std::string &name,
+		const std::string &vertex_path,
+		const std::string &fragment_path);
+
+	/*
+	 * @brief Load compute shader from file
+	 * @param name Shader name for caching
+	 * @param compute_path Compute shader file path
+	 * @return Shader object
+	 */
+	std::shared_ptr<Shader> load_compute_shader(const std::string &name,
+		const std::string &compute_path);
+
+	/*
+	 * @brief Get cached shader by name
+	 * @param name Shader name
+	 * @return Shader object (invalid if not found)
+	 */
+	std::shared_ptr<Shader> get_shader(const std::string &name) const;
+
+	/*
+	 * @brief Get G-Buffer shader
+	 * @return G-Buffer shader
+	 */
+	const std::shared_ptr<Shader> &get_gbuffer_shader() const {
+		return gbuffer_shader_;
+	}
+
+	/*
+	 * @brief Get ray tracing compute shader
+	 * @return Ray tracing shader
+	 */
+	const std::shared_ptr<Shader> &get_raytracing_shader() const {
+		return raytracing_shader_;
+	}
+
+	/*
+	 * @brief Get mean denoise compute shader
+	 * @return Denoise shader (nullptr if not loaded)
+	 */
+	const std::shared_ptr<Shader> &get_denoise_shader() const {
+		return denoise_shader_;
+	}
+
+	/*
+	 * @brief Get screen bliting shader
+	 * @return Screen bliting shader (nullptr if not loaded)
+	 */
+	const std::shared_ptr<Shader> &get_screen_blit_shader() const {
+		return screen_blit_shader_;
+	}
 
 private:
 	std::unordered_map<std::string, std::shared_ptr<Shader>> shader_cache_;
@@ -68,12 +92,14 @@ private:
 	std::shared_ptr<Shader> raytracing_shader_;
 	std::shared_ptr<Shader> denoise_shader_;
 	std::shared_ptr<Shader> screen_blit_shader_;
-    
-    bool initialized_;
-    
-    /// @brief Load built-in shaders
-    /// @return True if loading succeeded
-    bool load_builtin_shaders_();
+
+	bool initialized_;
+
+	/*
+	 * @brief Load built-in shaders
+	 * @return True if loading succeeded
+	 */
+	bool load_builtin_shaders_();
 };
 
 } // namespace are

@@ -7,61 +7,57 @@
 
 namespace are {
 
-/**
- * @brief Mean filter denoiser using compute shader
- */
+// Mean filter denoiser using compute shader
 class Denoiser {
 public:
-    /**
-     * @brief Construct denoiser
-     * @param width Output width
-     * @param height Output height
-     */
-    Denoiser(uint width, uint height);
-
-    /**
-     * @brief Destroy denoiser
-     */
-    ~Denoiser();
+	/**
+	 * @brief Construct denoiser
+	 * @param width Output width
+	 * @param height Output height
+	 */
+	Denoiser(uint width, uint height);
 
 	/**
-     * @brief Initialize GPU resources
-     * @param shader Denoise compute shader (managed by ShaderManager)
-     * @return True on success
-     */
-    bool initialize(const std::shared_ptr<Shader>& shader);
+	 * @brief Destroy denoiser
+	 */
+	~Denoiser();
 
-    /**
-     * @brief Release GPU resources
-     */
-    void release();
+	/**
+	 * @brief Initialize GPU resources
+	 * @param shader Denoise compute shader (managed by ShaderManager)
+	 * @return True on success
+	 */
+	bool initialize(const std::shared_ptr<Shader> &shader);
 
-    /**
-     * @brief Resize internal targets
-     * @param width New width
-     * @param height New height
-     */
-    void resize(uint width, uint height);
+	/**
+	 * @brief Release GPU resources
+	 */
+	void release();
 
-    /**
-     * @brief Apply mean filter
-     * @param input_texture RGBA32F input texture
-     * @param radius Filter radius (1 => 3x3)
-     * @return Output texture handle (internal)
-     */
-    TextureHandle denoise(TextureHandle input_texture, int radius);
+	/**
+	 * @brief Resize internal targets
+	 * @param width New width
+	 * @param height New height
+	 */
+	void resize(uint width, uint height);
+
+	/**
+	 * @brief Apply mean filter
+	 * @param input_texture RGBA32F input texture
+	 * @param radius Filter radius (1 => 3x3)
+	 * @return Output texture handle (internal)
+	 */
+	TextureHandle denoise(TextureHandle input_texture, int radius);
 
 private:
-    uint width_;
-    uint height_;
+	uint width_;
+	uint height_;
 	std::shared_ptr<Shader> shader_;
-    TextureHandle output_texture_;
-    bool initialized_;
+	TextureHandle output_texture_;
+	bool initialized_;
 
-    /**
-     * @brief Create output texture
-     */
-    void create_output_texture_();
+	// Create output texture
+	void create_output_texture_();
 };
 
 } // namespace are

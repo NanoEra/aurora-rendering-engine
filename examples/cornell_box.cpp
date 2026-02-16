@@ -9,6 +9,9 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <memory>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 using namespace are;
 
@@ -20,6 +23,28 @@ const uint WINDOW_HEIGHT = 800;
 GLFWwindow* g_window = nullptr;
 std::unique_ptr<Renderer> g_renderer = nullptr;
 std::unique_ptr<Scene> g_scene = nullptr;
+std::shared_ptr<Camera> g_camera = nullptr; // Keep a direct reference to camera
+
+// --- Camera Control State ---
+Vec3 g_cameraPos = Vec3(0.0f, 0.0f, 4.5f);
+Vec3 g_cameraTarget = Vec3(0.0f, 0.0f, 0.0f);
+Vec3 g_cameraUp = Vec3(0.0f, 1.0f, 0.0f);
+Vec3 g_worldUp = Vec3(0.0f, 1.0f, 0.0f);
+
+// Euler Angles
+float g_yaw = -90.0f; // Initialized to look along -Z (standard OpenGL)
+float g_pitch = 0.0f;
+
+// Control settings
+float g_moveSpeed = 2.5f;
+float g_mouseSensitivity = 0.1f;
+bool g_firstMouse = true;
+double g_lastX = WINDOW_WIDTH / 2.0;
+double g_lastY = WINDOW_HEIGHT / 2.0;
+
+// Time
+float g_deltaTime = 0.0f;
+float g_lastFrame = 0.0f;
 
 // GLFW error callback
 void glfw_error_callback(int error, const char* description) {
@@ -225,17 +250,17 @@ void setup_cornell_box() {
     g_scene->add_mesh(tall_box);
     
     // Short box (metal, right side)
-    auto short_box = create_box(Vec3(0.2f, -room_size, 0.2f), Vec3(0.9f, -0.4f, 0.9f), /*metal_id*/white_id);
+    auto short_box = create_box(Vec3(0.2f, -room_size, 0.2f), Vec3(0.9f, -0.4f, 0.9f), white_id);
     short_box->upload_to_gpu();
     g_scene->add_mesh(short_box);
     
     // Setup camera
-    auto camera = std::make_shared<Camera>();
-    camera->set_position(Vec3(0.0f, 0.0f, 4.5f));
-    camera->set_target(Vec3(0.0f, 0.0f, 0.0f));
-    camera->set_up(Vec3(0.0f, 1.0f, 0.0f));
-    camera->set_perspective(45.0f, static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 100.0f);
-    g_scene->set_camera(camera);
+    g_camera = std::make_shared<Camera>();
+    g_camera->set_position(g_cameraPos);
+    g_camera->set_target(g_cameraTarget);
+    g_camera->set_up(g_cameraUp);
+    g_camera->set_perspective(45.0f, static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 100.0f);
+    g_scene->set_camera(g_camera);
     
     // Add point light
     auto light = std::make_shared<Light>();
@@ -251,7 +276,6 @@ void setup_cornell_box() {
 
 /// @brief Initialize GLFW and create window
 bool init_window() {
-    // Set error callback before init
     glfwSetErrorCallback(glfw_error_callback);
     
     if (!glfwInit()) {
@@ -261,78 +285,119 @@ bool init_window() {
     
     ARE_LOG_INFO("GLFW initialized successfully");
     
-    // Request OpenGL 4.5 Core Profile
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    
-    // Additional hints for better compatibility
     glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
     glfwWindowHint(GLFW_SAMPLES, 0);
     
-    ARE_LOG_INFO("Creating window...");
     g_window = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Aurora - Cornell Box", nullptr, nullptr);
     
     if (!g_window) {
         ARE_LOG_ERROR("Failed to create GLFW window");
-        ARE_LOG_ERROR("Possible reasons:");
-        ARE_LOG_ERROR("  1. OpenGL 4.5 not supported by your GPU/driver");
-        ARE_LOG_ERROR("  2. No display server running (X11/Wayland)");
-        ARE_LOG_ERROR("  3. Insufficient GPU resources");
-        
-        // Try to get more info
-        int major, minor, rev;
-        glfwGetVersion(&major, &minor, &rev);
-        ARE_LOG_INFO("GLFW version: " + std::to_string(major) + "." + 
-                    std::to_string(minor) + "." + std::to_string(rev));
-        
         glfwTerminate();
         return false;
     }
     
-    ARE_LOG_INFO("Window created successfully");
-    
     glfwMakeContextCurrent(g_window);
-    glfwSwapInterval(1); // Enable vsync
+    glfwSwapInterval(1);
     
-    // Load OpenGL functions
-    ARE_LOG_INFO("Loading OpenGL functions...");
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         ARE_LOG_ERROR("Failed to initialize GLAD");
         return false;
     }
     
-    // Print OpenGL info
-    const char* vendor = (const char*)glGetString(GL_VENDOR);
-    const char* renderer = (const char*)glGetString(GL_RENDERER);
-    const char* version = (const char*)glGetString(GL_VERSION);
-    const char* glsl_version = (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
-    
-    ARE_LOG_INFO("OpenGL Vendor: " + std::string(vendor ? vendor : "Unknown"));
-    ARE_LOG_INFO("OpenGL Renderer: " + std::string(renderer ? renderer : "Unknown"));
-    ARE_LOG_INFO("OpenGL Version: " + std::string(version ? version : "Unknown"));
-    ARE_LOG_INFO("GLSL Version: " + std::string(glsl_version ? glsl_version : "Unknown"));
-    
-    // Check OpenGL version
-    GLint major_ver, minor_ver;
-    glGetIntegerv(GL_MAJOR_VERSION, &major_ver);
-    glGetIntegerv(GL_MINOR_VERSION, &minor_ver);
-    
-    ARE_LOG_INFO("OpenGL Context: " + std::to_string(major_ver) + "." + std::to_string(minor_ver));
-    
-    // if (major_ver < 4 || (major_ver == 4 && minor_ver < 5)) {
-    //     ARE_LOG_ERROR("OpenGL 4.5 or higher is required!");
-    //     ARE_LOG_ERROR("Your system supports: OpenGL " + std::to_string(major_ver) + "." + std::to_string(minor_ver));
-    //     return false;
-    // }
-    
-    // Check compute shader support
-    GLint max_compute_work_group_invocations;
-    glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &max_compute_work_group_invocations);
-    ARE_LOG_INFO("Max compute work group invocations: " + std::to_string(max_compute_work_group_invocations));
-    
     return true;
+}
+
+// --- Input Processing ---
+void process_input() {
+    // Calculate delta time
+    float currentFrame = glfwGetTime();
+    g_deltaTime = currentFrame - g_lastFrame;
+    g_lastFrame = currentFrame;
+    
+    float velocity = g_moveSpeed * g_deltaTime;
+    bool camera_changed = false;
+
+    // 1. Mouse Rotation (Left Button Hold)
+    if (glfwGetMouseButton(g_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        double xpos, ypos;
+        glfwGetCursorPos(g_window, &xpos, &ypos);
+        
+        if (g_firstMouse) {
+            g_lastX = xpos;
+            g_lastY = ypos;
+            g_firstMouse = false;
+        }
+        
+        float xoffset = xpos - g_lastX;
+        float yoffset = g_lastY - ypos; // Reversed since y-coordinates go from bottom to top
+        g_lastX = xpos;
+        g_lastY = ypos;
+        
+        // Only update if mouse actually moved
+        if (xoffset != 0.0f || yoffset != 0.0f) {
+            xoffset *= g_mouseSensitivity;
+            yoffset *= g_mouseSensitivity;
+            
+            g_yaw += xoffset;
+            g_pitch += yoffset;
+            
+            // Constrain pitch
+            if (g_pitch > 89.0f) g_pitch = 89.0f;
+            if (g_pitch < -89.0f) g_pitch = -89.0f;
+            
+            camera_changed = true;
+        }
+    }
+    else {
+        g_firstMouse = true; // Reset when released
+    }
+    
+    // 2. Calculate Direction Vectors
+    glm::vec3 front;
+    front.x = cos(glm::radians(g_yaw)) * cos(glm::radians(g_pitch));
+    front.y = sin(glm::radians(g_pitch));
+    front.z = sin(glm::radians(g_yaw)) * cos(glm::radians(g_pitch));
+    glm::vec3 frontNorm = glm::normalize(front);
+    
+    glm::vec3 rightNorm = glm::normalize(glm::cross(frontNorm, glm::vec3(g_worldUp.x, g_worldUp.y, g_worldUp.z)));
+    
+    // 3. Keyboard Movement (WASD)
+    glm::vec3 pos = glm::vec3(g_cameraPos.x, g_cameraPos.y, g_cameraPos.z);
+    
+    if (glfwGetKey(g_window, GLFW_KEY_W) == GLFW_PRESS) {
+        pos += frontNorm * velocity;
+        camera_changed = true;
+    }
+    if (glfwGetKey(g_window, GLFW_KEY_S) == GLFW_PRESS) {
+        pos -= frontNorm * velocity;
+        camera_changed = true;
+    }
+    if (glfwGetKey(g_window, GLFW_KEY_A) == GLFW_PRESS) {
+        pos -= rightNorm * velocity;
+        camera_changed = true;
+    }
+    if (glfwGetKey(g_window, GLFW_KEY_D) == GLFW_PRESS) {
+        pos += rightNorm * velocity;
+        camera_changed = true;
+    }
+    
+    // 4. Apply changes to Scene Camera and Notify Renderer
+    if (camera_changed) {
+        g_cameraPos = Vec3(pos.x, pos.y, pos.z);
+        
+        // Target = Position + Front
+        Vec3 newTarget = g_cameraPos + Vec3(frontNorm.x, frontNorm.y, frontNorm.z);
+        
+        g_camera->set_position(g_cameraPos);
+        g_camera->set_target(newTarget);
+        
+        // CRITICAL: Notify renderer to reset accumulation
+        g_renderer->notify_scene_changed(*g_scene);
+    }
 }
 
 /// @brief Main render loop
@@ -340,10 +405,13 @@ void render_loop() {
     ARE_LOG_INFO("Entering render loop...");
     
     int frame_count = 0;
-    double last_time = glfwGetTime();
-    double fps_time = last_time;
+    double fps_time = glfwGetTime();
+    g_lastFrame = glfwGetTime(); // Initialize for delta time
     
     while (!glfwWindowShouldClose(g_window)) {
+        // Process input at the start of the frame
+        process_input();
+        
         // Render
         RenderStats stats = g_renderer->render(*g_scene);
         
@@ -364,16 +432,6 @@ void render_loop() {
             
             frame_count = 0;
             fps_time = current_time;
-        }
-        
-        // Print detailed stats every 60 frames
-        static int stat_frame_count = 0;
-        if (++stat_frame_count % 60 == 0) {
-            ARE_LOG_INFO("Frame time: " + std::to_string(stats.frame_time_ms_) + " ms (" +
-                        std::to_string(1000.0f / stats.frame_time_ms_) + " FPS)");
-            ARE_LOG_INFO("  G-Buffer: " + std::to_string(stats.gbuffer_time_ms_) + " ms");
-            ARE_LOG_INFO("  Ray trace: " + std::to_string(stats.raytrace_time_ms_) + " ms");
-            ARE_LOG_INFO("  Triangles: " + std::to_string(stats.triangle_count_));
         }
         
         // ESC to exit
@@ -405,26 +463,10 @@ void cleanup() {
 }
 
 int main() {
-    // Initialize logger
     ARE_LOG_INFO("===========================================");
     ARE_LOG_INFO("Aurora Rendering Engine - Cornell Box Demo");
     ARE_LOG_INFO("===========================================");
-    
-    // Check environment
-    const char* display = getenv("DISPLAY");
-    const char* wayland_display = getenv("WAYLAND_DISPLAY");
-    
-    if (!display && !wayland_display) {
-        ARE_LOG_ERROR("No display server detected!");
-        ARE_LOG_ERROR("Make sure you're running in a graphical environment (X11 or Wayland)");
-        ARE_LOG_ERROR("DISPLAY=" + std::string(display ? display : "not set"));
-        ARE_LOG_ERROR("WAYLAND_DISPLAY=" + std::string(wayland_display ? wayland_display : "not set"));
-        return -1;
-    }
-    
-    ARE_LOG_INFO("Display server: " + std::string(display ? display : wayland_display));
-    
-    // Initialize window
+
     if (!init_window()) {
         cleanup();
         ARE_LOG_ERROR("Failed to initialize window");
@@ -432,11 +474,9 @@ int main() {
         return -1;
     }
     
-    // Setup scene
     ARE_LOG_INFO("Setting up Cornell Box scene...");
     setup_cornell_box();
     
-    // Initialize renderer
     ARE_LOG_INFO("Initializing renderer...");
     RendererConfig config;
     config.width_ = WINDOW_WIDTH;
@@ -444,7 +484,7 @@ int main() {
     config.samples_per_pixel_ = 1;
     config.max_ray_depth_ = 4;
     config.enable_accumulation_ = true;
-    config.enable_denoising_ = true;
+    config.enable_denoising_ = false;
     
     g_renderer = std::make_unique<Renderer>(config);
     if (!g_renderer->initialize()) {
@@ -456,13 +496,13 @@ int main() {
     
     ARE_LOG_INFO("===========================================");
     ARE_LOG_INFO("Renderer initialized successfully!");
-    ARE_LOG_INFO("Press ESC to exit");
+    ARE_LOG_INFO("Controls:");
+    ARE_LOG_INFO("  WASD - Move Camera");
+    ARE_LOG_INFO("  Hold Left Mouse Button - Rotate Camera");
+    ARE_LOG_INFO("  ESC - Exit");
     ARE_LOG_INFO("===========================================");
     
-    // Main loop
     render_loop();
-    
-    // Cleanup
     cleanup();
     
     ARE_LOG_INFO("Cornell Box demo finished");

@@ -1,4 +1,5 @@
 #include "core/raytracer.h"
+#include "scene/pbr_material_gpu.h"
 #include "basic/constants.h"
 #include "utils/logger.h"
 #include <glad/glad.h>
@@ -244,50 +245,32 @@ void RayTracer::set_config(const RayTracerConfig &config) {
 }
 
 void RayTracer::upload_scene_data_(const Scene &scene) {
-	// Upload materials (on change only)
-	const auto &materials = scene.get_materials();
+	// Upload PBR materials (temporary: texture indices = TEX_INVALID)
+	const auto& materials = scene.get_materials();
 	if (!materials.empty()) {
-		struct MaterialData {
-			Vec3 albedo;
-			float metallic;
-			Vec3 emission;
-			float roughness;
-			int type;
-			float ior;
-			Vec2 padding;
-		};
-
-		std::vector<MaterialData> material_data;
+		std::vector<PbrMaterialGpu> material_data;
 		material_data.reserve(materials.size());
 
-		for (const auto &mat : materials) {
-			MaterialData data {};
-			data.albedo = mat->get_albedo();
-			data.metallic = mat->get_metallic();
-			data.emission = mat->get_emission();
-			data.roughness = mat->get_roughness();
-			data.type = static_cast<int>(mat->get_type());
-			data.ior = mat->get_ior();
-			material_data.push_back(data);
+		for (const auto& mat : materials) {
+			PbrMaterialGpu m{};
+			m.base_color_factor_ = Vec4(mat->get_albedo(), 1.0f);
+			m.emissive_factor_ = Vec4(mat->get_emission(), 0.0f);
+
+			// Pack flags into float bits (w)
+			uint flags = 0u;
+			m.mr_normal_flags_ = Vec4(mat->get_metallic(), mat->get_roughness(), 1.0f, glm::uintBitsToFloat(flags));
+
+			m.tex0_ = glm::uvec4(TEX_INVALID, TEX_INVALID, TEX_INVALID, TEX_INVALID);
+			m.tex1_ = glm::uvec4(TEX_INVALID, TEX_INVALID, TEX_INVALID, TEX_INVALID);
+
+			material_data.push_back(m);
 		}
 
-		uint h = fnv1a_hash_bytes(material_data.data(), material_data.size() * sizeof(MaterialData));
-		if (h != materials_hash_) {
-			materials_hash_ = h;
-
-			glBindBuffer(GL_SHADER_STORAGE_BUFFER, material_buffer_);
-			glBufferData(GL_SHADER_STORAGE_BUFFER,
-				material_data.size() * sizeof(MaterialData),
-				material_data.data(), GL_DYNAMIC_DRAW);
-			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, material_buffer_);
-
-			reset_accumulation(); // materials changed => invalidate accumulation
-		} else {
-			// Still ensure bound (in case other code changed bindings)
-			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, material_buffer_);
-		}
-	} else {
-		materials_hash_ = 0u;
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, material_buffer_);
+		glBufferData(GL_SHADER_STORAGE_BUFFER,
+					 material_data.size() * sizeof(PbrMaterialGpu),
+					 material_data.data(), GL_DYNAMIC_DRAW);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, material_buffer_);
 	}
 
 	// Upload lights (on change only)

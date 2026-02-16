@@ -1,51 +1,45 @@
 <div align="center">
-  <a href="https://github.com/NanoEraStudio/AuroraRenderingEngine">
+  <a href="https://github.com/NanoEra/aurora-rendering-engine">
     <img src="https://are.nanoera.top/res/logo/logo.png" alt="Aurora Logo" width="120" height="120">
   </a>
   
   <h1 align="center">Aurora Rendering Engine</h1>
   
   <p align="center">
-    <strong>A.R.E.</strong> - A High-Performance Path Tracing Library in C++
+    <strong>ARE</strong> - A High-Performance Path Tracing Library in C++
     <br/>
     <br/>
-    English | <a href="README-zh.md">中文</a>
+    English | <a href="README_zh.md">中文</a>
   </p>
   
   <p align="center">
-    <a href="https://github.com/NanoEraStudio/AuroraRenderingEngine/blob/main/LICENSE">
-      <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+    <a href="https://github.com/NanoEra/aurora-rendering-engine/blob/main/LICENSE">
+      <img src="https://img.shields.io/badge/license-LGPL-blue.svg" alt="License">
     </a>
-    <a href="https://github.com/NanoEraStudio/AuroraRenderingEngine/releases">
+    <a href="https://github.com/NanoEra/aurora-rendering-engine/releases">
       <img src="https://img.shields.io/badge/version-1.0.0-green.svg" alt="Version">
     </a>
-    <a href="https://github.com/NanoEraStudio/AuroraRenderingEngine/issues">
-      <img src="https://img.shields.io/github/issues/NanoEraStudio/AuroraRenderingEngine.svg" alt="Issues">
+    <a href="https://github.com/NanoEra/aurora-rendering-engine/issues">
+      <img src="https://img.shields.io/github/issues/NanoEra/aurora-rendering-engine.svg" alt="Issues">
     </a>
   </p>
 </div>
+
 ---
-## 📖 Overview
-**Aurora Rendering Engine (A.R.E.)** is a high-performance path tracing library developed in C++ by **NanoEra Studio**. Leveraging OpenGL 4.3 compute shaders for GPU-accelerated path tracing, A.R.E. provides a clean and intuitive API suitable for learning and researching ray tracing techniques.
-## ✨ Features
-- 🚀 **GPU-Accelerated Path Tracing** - Powered by OpenGL 4.3 Compute Shaders
-- 🎨 **PBR Material System** - Diffuse, Metal, Dielectric materials
-- 💡 **Multiple Light Types** - Point lights, Area lights, Environmental lighting
-- 📦 **Static Library** - Easy integration into existing projects
-- 🔧 **CMake Build System** - Cross-platform support
-## 🛠️ Dependencies
-A.R.E. depends on the following external libraries:
-- **OpenGL 4.3** - Graphics API
-- **GLFW** - Window and input management
-- **GLAD** - OpenGL loader
-- **GLM** - Mathematics library
-- **stb-image** - Image loading
-- **spdlog** - Logging system
-## 📦 Quick Start
+## Overview
+**Aurora Rendering Engine (ARE)** is a high-performance path tracing library developed in C++ by **NanoEra Studio**.
+## Dependencies
+- **OpenGL 4.3**
+- **GLFW**
+- **GLAD**
+- **GLM**
+- **stb-image**
+- **spdlog**
+## Quick Start
 ### Clone Repository
 ```bash
-git clone https://github.com/NanoEraStudio/AuroraRenderingEngine.git
-cd AuroraRenderingEngine
+git clone https://github.com/NanoEra/aurora-rendering-engine.git
+cd aurora-rendering-engine
 ```
 ### Build Project
 ```bash
@@ -53,8 +47,8 @@ mkdir build && cd build
 cmake ..
 cmake --build .
 ```
-## 🎮 Minimal Example: Cornell Box
-The following code demonstrates how to render a classic Cornell Box scene using A.R.E.:
+## Example
+Here is a cornell box demo using ARE:
 ```cpp
 #include <core/renderer.h>
 #include <scene/scene.h>
@@ -127,15 +121,8 @@ int main() {
     return 0;
 }
 ```
-## 📚 Documentation
-For detailed documentation, visit: [A.R.E. Documentation](https://are.nanoera.top/docs)
-## 🤝 Contributing
-We welcome all forms of contributions! Please check [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-## 🙏 Acknowledgments
-Thanks to all the developers and contributors of the dependency libraries.
 ---
+
 <div align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/NanoEraStudio">NanoEra Studio</a></sub>
+  <sub>Built by <a href="https://www.nanoera.top/">NanoEra Studio</a></sub>
 </div>

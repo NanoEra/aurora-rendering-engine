@@ -1,52 +1,44 @@
 <div align="center">
-  <a href="https://github.com/NanoEraStudio/AuroraRenderingEngine">
+  <a href="https://github.com/NanoEra/aurora-rendering-engine">
     <img src="https://are.nanoera.top/res/logo/logo.png" alt="Aurora Logo" width="120" height="120">
   </a>
   
   <h1 align="center">曙光渲染引擎</h1>
   
   <p align="center">
-    <strong>Aurora Rendering Engine (A.R.E.)</strong><br/>
-    一个基于 C++ 的高性能路径追踪渲染库
+    <strong>Aurora Rendering Engine (ARE)</strong> - 一个基于 C++ 的高性能路径追踪渲染库
     <br/>
     <br/>
-    <a href="README_EN.md">English</a> | 中文
+    <a href="README.md">English</a> | 中文
   </p>
   
   <p align="center">
-    <a href="https://github.com/NanoEraStudio/AuroraRenderingEngine/blob/main/LICENSE">
+    <a href="https://github.com/NanoEra/aurora-rendering-engine/blob/main/LICENSE">
       <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
     </a>
-    <a href="https://github.com/NanoEraStudio/AuroraRenderingEngine/releases">
+    <a href="https://github.com/NanoEra/aurora-rendering-engine/releases">
       <img src="https://img.shields.io/badge/version-1.0.0-green.svg" alt="Version">
     </a>
-    <a href="https://github.com/NanoEraStudio/AuroraRenderingEngine/issues">
-      <img src="https://img.shields.io/github/issues/NanoEraStudio/AuroraRenderingEngine.svg" alt="Issues">
+    <a href="https://github.com/NanoEra/aurora-rendering-engine/issues">
+      <img src="https://img.shields.io/github/issues/NanoEra/aurora-rendering-engine.svg" alt="Issues">
     </a>
   </p>
 </div>
+
 ---
 ## 📖 简介
-曙光渲染引擎（Aurora Rendering Engine，简称 A.R.E.）是一个基于 C++ 开发的路径追踪渲染库，由 **NanoEra Studio** 开发和维护。A.R.E. 利用 OpenGL 4.3 计算着色器实现高效的 GPU 路径追踪，提供了简洁易用的 API，适合学习和研究光线追踪技术。
-## ✨ 特性
-- 🚀 **GPU 加速路径追踪** - 基于 OpenGL 4.3 Compute Shader
-- 🎨 **PBR 材质系统** - 支持漫反射、金属、电介质等材质
-- 💡 **多种光源支持** - 点光源、面光源、环境光
-- 📦 **静态链接库** - 轻松集成到现有项目
-- 🔧 **CMake 构建** - 跨平台支持
-## 🛠️ 依赖项
-A.R.E. 依赖以下外部库：
-- **OpenGL 4.3** - 图形 API
-- **GLFW** - 窗口和输入管理
-- **GLAD** - OpenGL 加载器
-- **GLM** - 数学库
-- **stb-image** - 图像加载
-- **spdlog** - 日志系统
-## 📦 快速开始
+曙光渲染引擎（Aurora Rendering Engine，简称 ARE）是一个基于 C++ 开发的路径追踪渲染库，由 **NanoEra Studio** 开发和维护。
+## 依赖
+- **OpenGL 4.3**
+- **GLAD**
+- **GLM**
+- **stb-image**
+- **spdlog**
+## 快速开始
 ### 克隆仓库
 ```bash
-git clone https://github.com/NanoEraStudio/AuroraRenderingEngine.git
-cd AuroraRenderingEngine
+git clone https://github.com/NanoEra/aurora-rendering-engine.git
+cd aurora-rendering-engine
 ```
 ### 编译项目
 ```bash
@@ -54,8 +46,8 @@ mkdir build && cd build
 cmake ..
 cmake --build .
 ```
-## 🎮 极简示例：康奈尔盒子
-以下代码展示了如何使用 A.R.E. 渲染一个经典的康奈尔盒子场景：
+## 示例
+如下是一个Cornell Box Demo：
 ```cpp
 #include <core/renderer.h>
 #include <scene/scene.h>
@@ -128,16 +120,9 @@ int main() {
     return 0;
 }
 ```
-## 📚 文档
-详细文档请访问：[A.R.E. Documentation](https://are.nanoera.top/docs)
-## 🤝 贡献指南
-我们欢迎所有形式的贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解详情。
-## 📄 许可证
-本项目基于 MIT 许可证开源，详见 [LICENSE](LICENSE) 文件。
-## 🙏 致谢
-感谢所有依赖库的开发者和贡献者。
 ---
+
 <div align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/NanoEraStudio">NanoEra Studio</a></sub>
+  <sub>Built by <a href="https://www.nanoera.top/">NanoEra Studio</a></sub>
 </div>
 

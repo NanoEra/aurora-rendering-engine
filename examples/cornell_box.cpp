@@ -218,7 +218,7 @@ void setup_cornell_box() {
 	// 5: Glass/Dielectric (refraction)
 	auto glass_material = std::make_shared<Material>();
 	glass_material->set_albedo(Vec3(1.0f, 1.0f, 1.0f));
-	glass_material->set_ior(0.5f);
+	glass_material->set_ior(1.5f);
 	glass_material->set_roughness(0.0f);
 	glass_material->set_type(MaterialType::DIELECTRIC);
 	uint glass_id = g_scene->add_material(glass_material);

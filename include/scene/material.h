@@ -3,9 +3,21 @@
 
 #include "basic/types.h"
 #include "resource/texture.h"
+#include <array>
 #include <memory>
 
 namespace are {
+
+// Texture slot enumeration for PBR materials
+enum class TextureSlot {
+	ALBEDO = 0,
+	NORMAL = 1,
+	METALLIC = 2,
+	ROUGHNESS = 3,
+	AO = 4,
+	EMISSION = 5,
+	COUNT = 6
+};
 
 // Material type enumeration
 enum class MaterialType {
@@ -73,6 +85,37 @@ public:
 	void set_normal_texture(std::shared_ptr<Texture> texture);
 
 	/*
+	 * @brief Set metallic map
+	 * @param texture Metallic texture (R channel)
+	 */
+	void set_metallic_texture(std::shared_ptr<Texture> texture);
+
+	/*
+	 * @brief Set roughness map
+	 * @param texture Roughness texture (G channel)
+	 */
+	void set_roughness_texture(std::shared_ptr<Texture> texture);
+
+	/*
+	 * @brief Set ambient occlusion map
+	 * @param texture AO texture (R channel)
+	 */
+	void set_ao_texture(std::shared_ptr<Texture> texture);
+
+	/*
+	 * @brief Set emission map
+	 * @param texture Emission texture (RGB)
+	 */
+	void set_emission_texture(std::shared_ptr<Texture> texture);
+
+	/*
+	 * @brief Set texture for a specific slot
+	 * @param slot Texture slot
+	 * @param texture Texture to set
+	 */
+	void set_texture(TextureSlot slot, std::shared_ptr<Texture> texture);
+
+	/*
 	 * @brief Get albedo color
 	 * @return Albedo color
 	 */
@@ -125,7 +168,7 @@ public:
 	 * @return Albedo texture (nullptr if none)
 	 */
 	std::shared_ptr<Texture> get_albedo_texture() const {
-		return albedo_texture_;
+		return textures_[static_cast<int>(TextureSlot::ALBEDO)];
 	}
 
 	/*
@@ -133,7 +176,57 @@ public:
 	 * @return Normal texture (nullptr if none)
 	 */
 	std::shared_ptr<Texture> get_normal_texture() const {
-		return normal_texture_;
+		return textures_[static_cast<int>(TextureSlot::NORMAL)];
+	}
+
+	/*
+	 * @brief Get metallic texture
+	 * @return Metallic texture (nullptr if none)
+	 */
+	std::shared_ptr<Texture> get_metallic_texture() const {
+		return textures_[static_cast<int>(TextureSlot::METALLIC)];
+	}
+
+	/*
+	 * @brief Get roughness texture
+	 * @return Roughness texture (nullptr if none)
+	 */
+	std::shared_ptr<Texture> get_roughness_texture() const {
+		return textures_[static_cast<int>(TextureSlot::ROUGHNESS)];
+	}
+
+	/*
+	 * @brief Get AO texture
+	 * @return AO texture (nullptr if none)
+	 */
+	std::shared_ptr<Texture> get_ao_texture() const {
+		return textures_[static_cast<int>(TextureSlot::AO)];
+	}
+
+	/*
+	 * @brief Get emission texture
+	 * @return Emission texture (nullptr if none)
+	 */
+	std::shared_ptr<Texture> get_emission_texture() const {
+		return textures_[static_cast<int>(TextureSlot::EMISSION)];
+	}
+
+	/*
+	 * @brief Get texture for a specific slot
+	 * @param slot Texture slot
+	 * @return Texture (nullptr if none)
+	 */
+	std::shared_ptr<Texture> get_texture(TextureSlot slot) const {
+		return textures_[static_cast<int>(slot)];
+	}
+
+	/*
+	 * @brief Check if material has texture for slot
+	 * @param slot Texture slot
+	 * @return True if texture exists
+	 */
+	bool has_texture(TextureSlot slot) const {
+		return textures_[static_cast<int>(slot)] != nullptr;
 	}
 
 private:
@@ -144,8 +237,7 @@ private:
 	float ior_;
 	MaterialType type_;
 
-	std::shared_ptr<Texture> albedo_texture_;
-	std::shared_ptr<Texture> normal_texture_;
+	std::array<std::shared_ptr<Texture>, static_cast<int>(TextureSlot::COUNT)> textures_;
 };
 
 } // namespace are

@@ -175,6 +175,35 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 	compute_shader_->set_uint("u_light_count", static_cast<uint>(scene.get_lights().size()));
 	compute_shader_->set_bool("u_enable_accumulation", config_.enable_accumulation_);
 
+	// Enable/disable textures based on material usage
+	const auto &materials = scene.get_materials();
+	bool has_textures = false;
+	for (const auto &mat : materials) {
+		if (mat->has_texture(TextureSlot::ALBEDO) || mat->has_texture(TextureSlot::NORMAL) || mat->has_texture(TextureSlot::METALLIC) || mat->has_texture(TextureSlot::ROUGHNESS) || mat->has_texture(TextureSlot::AO) || mat->has_texture(TextureSlot::EMISSION)) {
+			has_textures = true;
+			break;
+		}
+	}
+	compute_shader_->set_bool("u_enable_textures", has_textures);
+
+	// Bind texture samplers (binding 10-15)
+	if (has_textures) {
+		// Bind default textures (0 = no texture) for now
+		// In full implementation, would bind actual material textures
+		glActiveTexture(GL_TEXTURE10);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glActiveTexture(GL_TEXTURE11);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glActiveTexture(GL_TEXTURE12);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glActiveTexture(GL_TEXTURE13);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glActiveTexture(GL_TEXTURE14);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glActiveTexture(GL_TEXTURE15);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
+
 	// Set camera data
 	const Camera &camera = scene.get_camera();
 	compute_shader_->set_vec3("u_camera_position", camera.get_position());
@@ -247,14 +276,17 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 	// Upload materials (on change only)
 	const auto &materials = scene.get_materials();
 	if (!materials.empty()) {
+		// Aligned to match GLSL std430 layout (vec3 = vec4 = 16 bytes)
 		struct MaterialData {
-			Vec3 albedo;
+			alignas(16) Vec3 albedo;
+			alignas(16) Vec3 emission;
 			float metallic;
-			Vec3 emission;
 			float roughness;
 			int type;
 			float ior;
-			Vec2 padding;
+			float padding1;
+			float padding2;
+			uint texture_handles[6];
 		};
 
 		std::vector<MaterialData> material_data;
@@ -268,6 +300,15 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 			data.roughness = mat->get_roughness();
 			data.type = static_cast<int>(mat->get_type());
 			data.ior = mat->get_ior();
+
+			// Texture handles (0 = no texture)
+			data.texture_handles[0] = mat->get_texture(TextureSlot::ALBEDO) ? mat->get_texture(TextureSlot::ALBEDO)->get_handle() : 0;
+			data.texture_handles[1] = mat->get_texture(TextureSlot::NORMAL) ? mat->get_texture(TextureSlot::NORMAL)->get_handle() : 0;
+			data.texture_handles[2] = mat->get_texture(TextureSlot::METALLIC) ? mat->get_texture(TextureSlot::METALLIC)->get_handle() : 0;
+			data.texture_handles[3] = mat->get_texture(TextureSlot::ROUGHNESS) ? mat->get_texture(TextureSlot::ROUGHNESS)->get_handle() : 0;
+			data.texture_handles[4] = mat->get_texture(TextureSlot::AO) ? mat->get_texture(TextureSlot::AO)->get_handle() : 0;
+			data.texture_handles[5] = mat->get_texture(TextureSlot::EMISSION) ? mat->get_texture(TextureSlot::EMISSION)->get_handle() : 0;
+
 			material_data.push_back(data);
 		}
 

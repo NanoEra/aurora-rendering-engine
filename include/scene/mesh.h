@@ -2,6 +2,7 @@
 #define ARE_INCLUDE_SCENE_MESH_H
 
 #include "basic/types.h"
+#include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 
 namespace are {
@@ -40,6 +41,14 @@ public:
 	void set_transform(const Mat4 &transform);
 
 	/*
+	 * @brief Set position (sugar for transform)
+	 * @param position Position vector
+	 */
+	void set_position(const Vec3 &position) {
+		transform_ = glm::translate(Mat4(1.0f), position);
+	}
+
+	/*
 	 * @brief Get vertices
 	 * @return Vertex array
 	 */
@@ -76,6 +85,12 @@ public:
 	 * @return True if upload succeeded
 	 */
 	bool upload_to_gpu();
+
+	/*
+	 * @brief Compute tangents from positions, normals and texcoords
+	 * Should be called after set_vertices and set_indices
+	 */
+	void compute_tangents();
 
 	// Release GPU resources
 	void release_gpu_resources();

@@ -105,13 +105,27 @@ uniform bool u_use_bvh;
 uniform uint u_bvh_node_count;
 uniform bool u_enable_textures;
 
-// Texture samplers for PBR
-layout(binding = 10) uniform sampler2D u_texture_albedo;
-layout(binding = 11) uniform sampler2D u_texture_normal;
-layout(binding = 12) uniform sampler2D u_texture_metallic;
-layout(binding = 13) uniform sampler2D u_texture_roughness;
-layout(binding = 14) uniform sampler2D u_texture_ao;
-layout(binding = 15) uniform sampler2D u_texture_emission;
+// Global texture arrays for bindless sampling (6 arrays for each texture type)
+layout(binding = 10) uniform sampler2DArray u_texture_albedo_array;
+layout(binding = 11) uniform sampler2DArray u_texture_normal_array;
+layout(binding = 12) uniform sampler2DArray u_texture_metallic_array;
+layout(binding = 13) uniform sampler2DArray u_texture_roughness_array;
+layout(binding = 14) uniform sampler2DArray u_texture_ao_array;
+layout(binding = 15) uniform sampler2DArray u_texture_emission_array;
+
+// Helper function to sample texture from array by index
+vec4 sample_texture_array(int slot, int index, vec2 uv) {
+    if (index <= 0) return vec4(1.0);
+    
+    if (slot == 0) return texture(u_texture_albedo_array, vec3(uv, float(index - 1)));
+    if (slot == 1) return texture(u_texture_normal_array, vec3(uv, float(index - 1)));
+    if (slot == 2) return texture(u_texture_metallic_array, vec3(uv, float(index - 1)));
+    if (slot == 3) return texture(u_texture_roughness_array, vec3(uv, float(index - 1)));
+    if (slot == 4) return texture(u_texture_ao_array, vec3(uv, float(index - 1)));
+    if (slot == 5) return texture(u_texture_emission_array, vec3(uv, float(index - 1)));
+    
+    return vec4(1.0);
+}
 
 // ============================================================================
 // Utility
@@ -406,7 +420,7 @@ vec3 apply_normal_map(vec3 normal, vec2 texcoord, vec3 tangent, uint normal_hand
     vec3 B = cross(normal, T);
     mat3 TBN = mat3(T, B, normal);
     
-    vec3 map_n = texture(u_texture_normal, texcoord).xyz * 2.0 - 1.0;
+    vec3 map_n = sample_texture_array(1, int(normal_handle), texcoord).xyz * 2.0 - 1.0;
     return normalize(TBN * map_n);
 }
 
@@ -416,7 +430,7 @@ void apply_material_textures(inout Material mat, vec2 texcoord, vec3 normal, vec
     
     // Albedo texture
     if (mat.texture_handles[0] != 0) {
-        mat.albedo *= texture(u_texture_albedo, texcoord).rgb;
+        mat.albedo *= sample_texture_array(0, int(mat.texture_handles[0]), texcoord).rgb;
     }
     
     // Normal map
@@ -426,23 +440,23 @@ void apply_material_textures(inout Material mat, vec2 texcoord, vec3 normal, vec
     
     // Metallic texture
     if (mat.texture_handles[2] != 0) {
-        mat.metallic *= texture(u_texture_metallic, texcoord).r;
+        mat.metallic *= sample_texture_array(2, int(mat.texture_handles[2]), texcoord).r;
     }
     
     // Roughness texture
     if (mat.texture_handles[3] != 0) {
-        mat.roughness *= texture(u_texture_roughness, texcoord).r;
+        mat.roughness *= sample_texture_array(3, int(mat.texture_handles[3]), texcoord).r;
     }
     
     // AO texture (multiply)
     if (mat.texture_handles[4] != 0) {
-        float ao = texture(u_texture_ao, texcoord).r;
+        float ao = sample_texture_array(4, int(mat.texture_handles[4]), texcoord).r;
         mat.albedo *= ao;
     }
     
     // Emission texture (add)
     if (mat.texture_handles[5] != 0) {
-        mat.emission += texture(u_texture_emission, texcoord).rgb;
+        mat.emission += sample_texture_array(5, int(mat.texture_handles[5]), texcoord).rgb;
     }
 }
 

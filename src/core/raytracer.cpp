@@ -58,6 +58,19 @@ bool RayTracer::initialize(const std::shared_ptr<Shader> &shader) {
 	glGenBuffers(1, &material_buffer_);
 	glGenBuffers(1, &light_buffer_);
 
+	// Initialize texture arrays (empty for now)
+	for (int i = 0; i < 6; i++) {
+		texture_arrays_[i] = 0;
+		texture_array_sizes_[i] = 0;
+		glGenTextures(1, &texture_arrays_[i]);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[i]);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	}
+	glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+
 	// Initialize BVH if enabled
 	if (config_.use_bvh_) {
 		bvh_ = std::make_unique<BVH>();
@@ -75,6 +88,14 @@ void RayTracer::release() {
 	if (accumulation_texture_ != INVALID_HANDLE) {
 		glDeleteTextures(1, &accumulation_texture_);
 		accumulation_texture_ = INVALID_HANDLE;
+	}
+
+	// Release texture arrays
+	for (int i = 0; i < 6; i++) {
+		if (texture_arrays_[i] != 0) {
+			glDeleteTextures(1, &texture_arrays_[i]);
+			texture_arrays_[i] = 0;
+		}
 	}
 
 	if (material_buffer_ != INVALID_HANDLE) {
@@ -186,22 +207,23 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 	}
 	compute_shader_->set_bool("u_enable_textures", has_textures);
 
-	// Bind texture samplers (binding 10-15)
+	// Build texture arrays if needed
 	if (has_textures) {
-		// Bind default textures (0 = no texture) for now
-		// In full implementation, would bind actual material textures
+		build_texture_arrays_(scene);
+
+		// Bind texture arrays
 		glActiveTexture(GL_TEXTURE10);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[0]);
 		glActiveTexture(GL_TEXTURE11);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[1]);
 		glActiveTexture(GL_TEXTURE12);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[2]);
 		glActiveTexture(GL_TEXTURE13);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[3]);
 		glActiveTexture(GL_TEXTURE14);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[4]);
 		glActiveTexture(GL_TEXTURE15);
-		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[5]);
 	}
 
 	// Set camera data
@@ -386,6 +408,72 @@ void RayTracer::bind_gbuffer_(const GBuffer &gbuffer) {
 
 	glBindImageTexture(5, gbuffer.get_texture(GBUFFER_MATERIAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 	glBindImageTexture(6, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);
+}
+
+void RayTracer::build_texture_arrays_(const Scene &scene) {
+	const auto &materials = scene.get_materials();
+
+	// Collect all textures for each slot
+	std::vector<std::shared_ptr<Texture>> textures[6];
+
+	for (const auto &mat : materials) {
+		for (int slot = 0; slot < 6; slot++) {
+			auto tex = mat->get_texture(static_cast<TextureSlot>(slot));
+			if (tex && tex->is_valid()) {
+				// Check if texture already added
+				bool found = false;
+				for (const auto &t : textures[slot]) {
+					if (t.get() == tex.get()) {
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+					textures[slot].push_back(tex);
+				}
+			}
+		}
+	}
+
+	// Build arrays for each slot
+	for (int slot = 0; slot < 6; slot++) {
+		if (textures[slot].empty()) {
+			texture_array_sizes_[slot] = 0;
+			continue;
+		}
+
+		texture_array_sizes_[slot] = static_cast<uint>(textures[slot].size());
+
+		// Get dimensions from first texture (assume all same size)
+		int width = textures[slot][0]->get_width();
+		int height = textures[slot][0]->get_height();
+
+		// Create texture array
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[slot]);
+		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, width, height,
+			static_cast<int>(textures[slot].size()), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+		// Copy each texture to array layer
+		for (size_t i = 0; i < textures[slot].size(); i++) {
+			auto &tex = textures[slot][i];
+			GLuint tex_handle = tex->get_handle();
+			if (tex_handle != 0) {
+				// Copy texture data using GetTexImage and CopyTexSubImage3D
+				std::vector<uint8_t> pixels(width * height * 4);
+				glBindTexture(GL_TEXTURE_2D, tex_handle);
+				glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+				glBindTexture(GL_TEXTURE_2D, 0);
+
+				glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, static_cast<int>(i),
+					width, height, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+			}
+		}
+
+		// Generate mipmaps
+		glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
+	}
+
+	glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
 } // namespace are

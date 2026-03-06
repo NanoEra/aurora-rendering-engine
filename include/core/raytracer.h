@@ -7,6 +7,7 @@
 #include "resource/buffer.h"
 #include "resource/shader.h"
 #include "scene/scene.h"
+#include <glad/glad.h>
 #include <memory>
 
 namespace are {
@@ -88,6 +89,10 @@ private:
 	uint height_;
 	RayTracerConfig config_;
 
+	// Texture arrays for PBR materials
+	GLuint texture_arrays_[6]; // albedo, normal, metallic, roughness, ao, emission
+	uint texture_array_sizes_[6]; // Number of textures in each array
+
 	std::shared_ptr<Shader> compute_shader_;
 	TextureHandle accumulation_texture_;
 	BufferHandle scene_buffer_;
@@ -117,6 +122,12 @@ private:
 	 * @param gbuffer G-Buffer to bind
 	 */
 	void bind_gbuffer_(const GBuffer &gbuffer);
+
+	/*
+	 * @brief Build texture arrays from scene materials
+	 * @param scene Scene containing materials
+	 */
+	void build_texture_arrays_(const Scene &scene);
 };
 
 } // namespace are

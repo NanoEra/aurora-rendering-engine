@@ -42,6 +42,7 @@ struct Triangle {
 	Vec3 v0_, v1_, v2_;
 	Vec3 n0_, n1_, n2_;
 	Vec2 uv0_, uv1_, uv2_;
+	Vec3 t0_, t1_, t2_; // Tangents for each vertex
 	uint material_id_;
 
 	// Get bounding box of triangle
@@ -75,6 +76,8 @@ struct TriangleGpu {
 	Vec4 n2_; ///< xyz = n2, w = reserved
 	Vec4 uv0_uv1_; ///< xy = uv0, zw = uv1
 	Vec4 uv2_; ///< xy = uv2, zw = reserved
+	Vec4 t0_; ///< xyz = t0 (tangent at v0), w = reserved
+	Vec4 t1_; ///< xyz = t1 (tangent at v1), w = reserved
 };
 
 // Bounding Volume Hierarchy for ray tracing acceleration

@@ -226,18 +226,19 @@ void setup_cornell_box() {
 	// 5: Textured material with normal map (for short box)
 	auto textured_material = std::make_shared<Material>();
 	textured_material->set_albedo(Vec3(1.0f, 1.0f, 1.0f));
-	textured_material->set_metallic(0.0f);
-	textured_material->set_roughness(0.8f);
-	textured_material->set_type(MaterialType::DIFFUSE);
+	textured_material->set_metallic(1.0f);
+	textured_material->set_roughness(1.0f);
+	// textured_material->set_type(MaterialType::DIFFUSE);
+	textured_material->set_type(MaterialType::METAL);
 
 	// Load textures
-	auto albedo_tex = std::make_shared<are::Texture>();
-	if (albedo_tex->load_from_file("examples/assets/normal_map_cornell_box/albedo.png")) {
-		textured_material->set_albedo_texture(albedo_tex);
-		ARE_LOG_INFO("Loaded albedo texture");
-	} else {
-		ARE_LOG_WARN("Failed to load albedo texture");
-	}
+	// auto albedo_tex = std::make_shared<are::Texture>();
+	// if (albedo_tex->load_from_file("examples/assets/normal_map_cornell_box/albedo.png")) {
+	// 	textured_material->set_albedo_texture(albedo_tex);
+	// 	ARE_LOG_INFO("Loaded albedo texture");
+	// } else {
+	// 	ARE_LOG_WARN("Failed to load albedo texture");
+	// }
 
 	auto normal_tex = std::make_shared<are::Texture>();
 	if (normal_tex->load_from_file("examples/assets/normal_map_cornell_box/normal.png")) {
@@ -296,7 +297,8 @@ void setup_cornell_box() {
 		Vec3(room_size, room_size, -room_size),
 		Vec3(room_size, -room_size, -room_size),
 		Vec3(0.0f, 0.0f, 1.0f),
-		white_id);
+		metal_id);
+		// white_id);
 	back_wall->upload_to_gpu();
 	g_scene->add_mesh(back_wall);
 
@@ -361,7 +363,7 @@ void setup_cornell_box() {
 	g_camera->set_position(g_cameraPos);
 	g_camera->set_target(g_cameraTarget);
 	g_camera->set_up(g_cameraUp);
-	g_camera->set_perspective(45.0f, static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 100.0f);
+	g_camera->set_perspective(90.0f, static_cast<float>(WINDOW_WIDTH) / WINDOW_HEIGHT, 0.1f, 100.0f);
 	g_scene->set_camera(g_camera);
 
 	// Add point light

@@ -162,7 +162,34 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 		rebuild_bvh(scene);
 	}
 
-	// Upload scene data
+	// Build texture arrays BEFORE uploading materials (so indices are available)
+	const auto &materials = scene.get_materials();
+	bool has_textures = false;
+	for (const auto &mat : materials) {
+		if (mat->has_texture(TextureSlot::ALBEDO) || mat->has_texture(TextureSlot::NORMAL) || mat->has_texture(TextureSlot::METALLIC) || mat->has_texture(TextureSlot::ROUGHNESS) || mat->has_texture(TextureSlot::AO) || mat->has_texture(TextureSlot::EMISSION)) {
+			has_textures = true;
+			break;
+		}
+	}
+	if (has_textures) {
+		build_texture_arrays_(scene);
+
+		// Bind texture arrays
+		glActiveTexture(GL_TEXTURE10);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[0]);
+		glActiveTexture(GL_TEXTURE11);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[1]);
+		glActiveTexture(GL_TEXTURE12);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[2]);
+		glActiveTexture(GL_TEXTURE13);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[3]);
+		glActiveTexture(GL_TEXTURE14);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[4]);
+		glActiveTexture(GL_TEXTURE15);
+		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[5]);
+	}
+
+	// Upload scene data (materials now have correct texture indices)
 	upload_scene_data_(scene);
 
 	// Use compute shader
@@ -197,34 +224,7 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 	compute_shader_->set_bool("u_enable_accumulation", config_.enable_accumulation_);
 
 	// Enable/disable textures based on material usage
-	const auto &materials = scene.get_materials();
-	bool has_textures = false;
-	for (const auto &mat : materials) {
-		if (mat->has_texture(TextureSlot::ALBEDO) || mat->has_texture(TextureSlot::NORMAL) || mat->has_texture(TextureSlot::METALLIC) || mat->has_texture(TextureSlot::ROUGHNESS) || mat->has_texture(TextureSlot::AO) || mat->has_texture(TextureSlot::EMISSION)) {
-			has_textures = true;
-			break;
-		}
-	}
 	compute_shader_->set_bool("u_enable_textures", has_textures);
-
-	// Build texture arrays if needed
-	if (has_textures) {
-		build_texture_arrays_(scene);
-
-		// Bind texture arrays
-		glActiveTexture(GL_TEXTURE10);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[0]);
-		glActiveTexture(GL_TEXTURE11);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[1]);
-		glActiveTexture(GL_TEXTURE12);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[2]);
-		glActiveTexture(GL_TEXTURE13);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[3]);
-		glActiveTexture(GL_TEXTURE14);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[4]);
-		glActiveTexture(GL_TEXTURE15);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[5]);
-	}
 
 	// Set camera data
 	const Camera &camera = scene.get_camera();
@@ -323,13 +323,13 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 			data.type = static_cast<int>(mat->get_type());
 			data.ior = mat->get_ior();
 
-			// Texture handles (0 = no texture)
-			data.texture_handles[0] = mat->get_texture(TextureSlot::ALBEDO) ? mat->get_texture(TextureSlot::ALBEDO)->get_handle() : 0;
-			data.texture_handles[1] = mat->get_texture(TextureSlot::NORMAL) ? mat->get_texture(TextureSlot::NORMAL)->get_handle() : 0;
-			data.texture_handles[2] = mat->get_texture(TextureSlot::METALLIC) ? mat->get_texture(TextureSlot::METALLIC)->get_handle() : 0;
-			data.texture_handles[3] = mat->get_texture(TextureSlot::ROUGHNESS) ? mat->get_texture(TextureSlot::ROUGHNESS)->get_handle() : 0;
-			data.texture_handles[4] = mat->get_texture(TextureSlot::AO) ? mat->get_texture(TextureSlot::AO)->get_handle() : 0;
-			data.texture_handles[5] = mat->get_texture(TextureSlot::EMISSION) ? mat->get_texture(TextureSlot::EMISSION)->get_handle() : 0;
+			// Texture array indices (0 = no texture, 1+ = index into array)
+			data.texture_handles[0] = mat->get_texture_index(TextureSlot::ALBEDO);
+			data.texture_handles[1] = mat->get_texture_index(TextureSlot::NORMAL);
+			data.texture_handles[2] = mat->get_texture_index(TextureSlot::METALLIC);
+			data.texture_handles[3] = mat->get_texture_index(TextureSlot::ROUGHNESS);
+			data.texture_handles[4] = mat->get_texture_index(TextureSlot::AO);
+			data.texture_handles[5] = mat->get_texture_index(TextureSlot::EMISSION);
 
 			material_data.push_back(data);
 		}
@@ -408,6 +408,12 @@ void RayTracer::bind_gbuffer_(const GBuffer &gbuffer) {
 
 	glBindImageTexture(5, gbuffer.get_texture(GBUFFER_MATERIAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 	glBindImageTexture(6, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);
+
+	// Texcoord
+	glBindImageTexture(7, gbuffer.get_texture(GBUFFER_TEXCOORD), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+
+	// Tangent
+	glBindImageTexture(8, gbuffer.get_texture(GBUFFER_TANGENT), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 }
 
 void RayTracer::build_texture_arrays_(const Scene &scene) {
@@ -453,19 +459,72 @@ void RayTracer::build_texture_arrays_(const Scene &scene) {
 		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, width, height,
 			static_cast<int>(textures[slot].size()), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
-		// Copy each texture to array layer
+		// Copy each texture to array layer and set indices on materials
 		for (size_t i = 0; i < textures[slot].size(); i++) {
 			auto &tex = textures[slot][i];
 			GLuint tex_handle = tex->get_handle();
 			if (tex_handle != 0) {
-				// Copy texture data using GetTexImage and CopyTexSubImage3D
-				std::vector<uint8_t> pixels(width * height * 4);
+				// Get original texture format
+				TextureFormat orig_format = tex->get_format();
+				int orig_width = tex->get_width();
+				int orig_height = tex->get_height();
+
+				// Get the correct format for reading
+				GLenum orig_gl_format = GL_RGBA;
+				int channels = 4;
+				switch (orig_format) {
+				case TextureFormat::R8:
+					orig_gl_format = GL_RED;
+					channels = 1;
+					break;
+				case TextureFormat::RG8:
+					orig_gl_format = GL_RG;
+					channels = 2;
+					break;
+				case TextureFormat::RGB8:
+					orig_gl_format = GL_RGB;
+					channels = 3;
+					break;
+				case TextureFormat::RGBA8:
+					orig_gl_format = GL_RGBA;
+					channels = 4;
+					break;
+				default:
+					orig_gl_format = GL_RGBA;
+					channels = 4;
+					break;
+				}
+
+				// Read texture data with correct format
+				std::vector<uint8_t> orig_pixels(orig_width * orig_height * channels);
 				glBindTexture(GL_TEXTURE_2D, tex_handle);
-				glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+				glGetTexImage(GL_TEXTURE_2D, 0, orig_gl_format, GL_UNSIGNED_BYTE, orig_pixels.data());
 				glBindTexture(GL_TEXTURE_2D, 0);
+
+				// Convert to RGBA for texture array (always RGBA8)
+				std::vector<uint8_t> pixels(orig_width * orig_height * 4, 255);
+				for (int y = 0; y < orig_height; y++) {
+					for (int x = 0; x < orig_width; x++) {
+						int src_idx = (y * orig_width + x) * channels;
+						int dst_idx = (y * orig_width + x) * 4;
+						pixels[dst_idx + 0] = orig_pixels[src_idx + 0];
+						pixels[dst_idx + 1] = (channels >= 2) ? orig_pixels[src_idx + 1] : orig_pixels[src_idx + 0];
+						pixels[dst_idx + 2] = (channels >= 3) ? orig_pixels[src_idx + 2] : orig_pixels[src_idx + 0];
+						pixels[dst_idx + 3] = (channels >= 4) ? orig_pixels[src_idx + 3] : 255;
+					}
+				}
 
 				glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, static_cast<int>(i),
 					width, height, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+				// Set texture index on all materials using this texture
+				// Index is i+1 because 0 means "no texture" in the shader
+				uint32_t array_index = static_cast<uint32_t>(i) + 1;
+				for (const auto &mat : materials) {
+					if (mat->get_texture(static_cast<TextureSlot>(slot)).get() == tex.get()) {
+						mat->set_texture_index(static_cast<TextureSlot>(slot), array_index);
+					}
+				}
 			}
 		}
 

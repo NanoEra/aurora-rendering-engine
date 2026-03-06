@@ -12,6 +12,8 @@ layout(location = 1) out vec4 g_normal;
 layout(location = 2) out vec4 g_albedo;
 layout(location = 3) out vec4 g_material;
 layout(location = 4) out uint g_material_id;
+layout(location = 5) out vec4 g_texcoord;
+layout(location = 6) out vec4 g_tangent;
 
 uniform vec3 u_albedo;
 uniform float u_metallic;
@@ -38,4 +40,10 @@ void main() {
 
     g_material = vec4(u_metallic, u_roughness, u_ior, float(u_material_type));
     g_material_id = u_material_id;
+    
+    // Store texcoord
+    g_texcoord = vec4(fs_in.texcoord, 0.0, 0.0);
+    
+    // Store tangent (xyz = tangent, w = unused)
+    g_tangent = vec4(fs_in.tangent, 0.0);
 }

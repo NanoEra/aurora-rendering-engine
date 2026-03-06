@@ -229,6 +229,24 @@ public:
 		return textures_[static_cast<int>(slot)] != nullptr;
 	}
 
+	/*
+	 * @brief Set texture array index for a slot (used by RayTracer)
+	 * @param slot Texture slot
+	 * @param index Index into the texture array
+	 */
+	void set_texture_index(TextureSlot slot, uint32_t index) {
+		texture_indices_[static_cast<int>(slot)] = index;
+	}
+
+	/*
+	 * @brief Get texture array index for a slot
+	 * @param slot Texture slot
+	 * @return Index into the texture array (0 = no texture)
+	 */
+	uint32_t get_texture_index(TextureSlot slot) const {
+		return texture_indices_[static_cast<int>(slot)];
+	}
+
 private:
 	Vec3 albedo_;
 	Vec3 emission_;
@@ -238,6 +256,7 @@ private:
 	MaterialType type_;
 
 	std::array<std::shared_ptr<Texture>, static_cast<int>(TextureSlot::COUNT)> textures_;
+	std::array<uint32_t, static_cast<int>(TextureSlot::COUNT)> texture_indices_;
 };
 
 } // namespace are

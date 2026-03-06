@@ -10,7 +10,8 @@ Material::Material()
 	, roughness_(0.5f)
 	, ior_(1.5f)
 	, type_(MaterialType::DIFFUSE)
-	, textures_() {
+	, textures_()
+	, texture_indices_() {
 }
 
 Material::~Material() {

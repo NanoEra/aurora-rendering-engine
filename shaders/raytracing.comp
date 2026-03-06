@@ -26,6 +26,12 @@ layout(binding = 2, rgba8)   uniform readonly image2D g_albedo;
 layout(binding = 5, rgba32f) uniform readonly image2D g_material;
 layout(binding = 6, r32ui)   uniform readonly uimage2D g_material_id;
 
+// Texcoord from G-Buffer
+layout(binding = 7, rgba32f) uniform readonly image2D g_texcoord;
+
+// Tangent from G-Buffer
+layout(binding = 8, rgba32f) uniform readonly image2D g_tangent;
+
 // Output
 layout(binding = 3, rgba32f) uniform image2D output_image;
 layout(binding = 4, rgba32f) uniform image2D accumulation_image;
@@ -64,6 +70,7 @@ struct HitInfo {
     vec3 position;
     vec3 normal;
     vec2 texcoord;
+    vec3 tangent;
     uint material_id;
     int material_type;  // material type from G-Buffer
 };
@@ -88,6 +95,8 @@ struct TriangleGpu {
     vec4 n2;
     vec4 uv0_uv1;     // xy uv0, zw uv1
     vec4 uv2;         // xy uv2
+    vec4 t0;          // tangent at v0
+    vec4 t1;          // tangent at v1
 };
 
 layout(std430, binding = 0) readonly buffer MaterialBuffer { Material materials[]; };
@@ -268,11 +277,21 @@ bool intersect_triangle(Ray ray, TriangleGpu tri, inout HitInfo hit) {
     vec2 uv1 = tri.uv0_uv1.zw;
     vec2 uv2 = tri.uv2.xy;
 
+    // Interpolate tangents
+    vec3 t0 = tri.t0.xyz;
+    vec3 t1 = tri.t1.xyz;
+    // Compute t2 from normal and t0 (t2 = cross(n, t0))
+    vec3 t2 = normalize(cross(n0, t0)); // approximate third tangent
+
     hit.hit = true;
     hit.t = t;
     hit.position = ray.origin + t * ray.direction;
     hit.normal = normalize(n0 * w + n1 * u + n2 * v);
     hit.texcoord = uv0 * w + uv1 * u + uv2 * v;
+    
+    // Interpolate tangent using barycentric coordinates
+    hit.tangent = normalize(t0 * w + t1 * u + t2 * v);
+    
     hit.material_id = as_uint(tri.v0_material.w);
     return true;
 }
@@ -378,6 +397,7 @@ HitInfo trace_primary_gbuffer(Ray ray, ivec2 pixel_coords) {
     hit.position = vec3(0.0);
     hit.normal = vec3(0.0, 1.0, 0.0);
     hit.texcoord = vec2(0.0);
+    hit.tangent = vec3(0.0);
     hit.material_id = 0u;
     hit.material_type = 0;
 
@@ -395,10 +415,20 @@ HitInfo trace_primary_gbuffer(Ray ray, ivec2 pixel_coords) {
     // material type stored in g_material.w
     vec4 mat = imageLoad(g_material, pixel_coords);
     int mtype = int(mat.w);
+    
+    // Read texcoord from G-Buffer
+    vec4 texcoord_tangent = imageLoad(g_texcoord, pixel_coords);
+    vec2 texcoord = texcoord_tangent.xy;
+    
+    // Read tangent from G-Buffer
+    vec4 tangent_data = imageLoad(g_tangent, pixel_coords);
+    vec3 tangent = tangent_data.xyz;
 
     hit.hit = true;
     hit.position = p;
     hit.normal = n;
+    hit.texcoord = texcoord;
+    hit.tangent = tangent;
     hit.material_id = mid;
     hit.material_type = mtype;
 
@@ -425,7 +455,7 @@ vec3 apply_normal_map(vec3 normal, vec2 texcoord, vec3 tangent, uint normal_hand
 }
 
 // Apply material textures to get final PBR values
-void apply_material_textures(inout Material mat, vec2 texcoord, vec3 normal, vec3 tangent) {
+void apply_material_textures(inout Material mat, inout vec3 normal, vec2 texcoord, vec3 tangent) {
     if (!u_enable_textures) return;
     
     // Albedo texture
@@ -556,7 +586,7 @@ ScatterResult scatter_ray(Ray ray_in, HitInfo hit, Material mat, inout uint seed
 // Direct lighting (with shadow ray)
 // ============================================================================
 
-vec3 eval_direct_lighting(HitInfo hit, Material mat, inout uint seed) {
+vec3 eval_direct_lighting(inout HitInfo hit, Material mat, inout uint seed) {
     if (u_light_count == 0u) return vec3(0.0);
 
     uint light_idx = uint(random_float(seed) * float(u_light_count)) % u_light_count;
@@ -652,10 +682,8 @@ vec3 trace_path_primary_gbuffer(ivec2 pixel_coords, ivec2 image_size, inout uint
             mat0.type = hit0.material_type;
         }
         
-        // Apply PBR textures
-        vec3 tangent0 = normalize(cross(hit0.normal, vec3(0.0, 1.0, 0.0)));
-        if (length(tangent0) < 0.001) tangent0 = normalize(cross(hit0.normal, vec3(1.0, 0.0, 0.0)));
-        apply_material_textures(mat0, hit0.texcoord, hit0.normal, tangent0);
+        // Apply PBR textures (use tangent from G-Buffer if available)
+        apply_material_textures(mat0, hit0.normal, hit0.texcoord, hit0.tangent);
 
         radiance += throughput * mat0.emission;
         if (mat0.type == MATERIAL_DIFFUSE) {
@@ -679,10 +707,8 @@ vec3 trace_path_primary_gbuffer(ivec2 pixel_coords, ivec2 image_size, inout uint
 
         Material mat = fetch_material(hit.material_id);
         
-        // Apply PBR textures
-        vec3 tangent = normalize(cross(hit.normal, vec3(0.0, 1.0, 0.0)));
-        if (length(tangent) < 0.001) tangent = normalize(cross(hit.normal, vec3(1.0, 0.0, 0.0)));
-        apply_material_textures(mat, hit.texcoord, hit.normal, tangent);
+        // Apply PBR textures (use tangent from intersection)
+        apply_material_textures(mat, hit.normal, hit.texcoord, hit.tangent);
 
         radiance += throughput * mat.emission;
         if (mat.type == MATERIAL_DIFFUSE) {

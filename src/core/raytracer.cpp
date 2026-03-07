@@ -306,8 +306,8 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 			float roughness;
 			int type;
 			float ior;
+			float ao;
 			float padding1;
-			float padding2;
 			uint texture_handles[6];
 		};
 
@@ -322,6 +322,7 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 			data.roughness = mat->get_roughness();
 			data.type = static_cast<int>(mat->get_type());
 			data.ior = mat->get_ior();
+			data.ao = 1.0f; // default: no AO
 
 			// Texture array indices (0 = no texture, 1+ = index into array)
 			data.texture_handles[0] = mat->get_texture_index(TextureSlot::ALBEDO);

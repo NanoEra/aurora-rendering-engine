@@ -1,13 +1,6 @@
-#include <core/renderer.h>
-#include <scene/scene.h>
-#include <scene/camera.h>
-#include <scene/mesh.h>
-#include <scene/material.h>
-#include <scene/light.h>
-#include <resource/texture.h>
-#include <utils/logger.h>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include <core/renderer.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -223,29 +216,46 @@ void setup_cornell_box() {
 	metal_material->set_type(MaterialType::METAL);
 	uint metal_id = g_scene->add_material(metal_material);
 
-	// 5: Textured material with normal map (for short box)
+	// 5: Textured material with PBR textures (for short box)
 	auto textured_material = std::make_shared<Material>();
-	textured_material->set_albedo(Vec3(1.0f, 1.0f, 1.0f));
-	textured_material->set_metallic(1.0f);
-	textured_material->set_roughness(1.0f);
-	// textured_material->set_type(MaterialType::DIFFUSE);
-	textured_material->set_type(MaterialType::METAL);
+	textured_material->set_albedo(Vec3(1.0f, 0.0f, 1.0f));
+	metal_material->set_metallic(1.0f);
+	metal_material->set_roughness(0.0f);
+	// textured_material->set_metallic(0.0f);
+	// textured_material->set_roughness(0.0f);
+	textured_material->set_type(MaterialType::DIFFUSE);
 
-	// Load textures
-	// auto albedo_tex = std::make_shared<are::Texture>();
-	// if (albedo_tex->load_from_file("examples/assets/normal_map_cornell_box/albedo.png")) {
-	// 	textured_material->set_albedo_texture(albedo_tex);
-	// 	ARE_LOG_INFO("Loaded albedo texture");
-	// } else {
-	// 	ARE_LOG_WARN("Failed to load albedo texture");
-	// }
+	// Load PBR textures
+	auto albedo_tex = std::make_shared<are::Texture>();
+	if (albedo_tex->load_from_file("examples/assets/normal_map_cornell_box/Bricks092_1K-JPG_Color.jpg")) {
+		textured_material->set_albedo_texture(albedo_tex);
+		ARE_LOG_INFO("Loaded albedo texture");
+	} else {
+		ARE_LOG_WARN("Failed to load albedo texture");
+	}
 
 	auto normal_tex = std::make_shared<are::Texture>();
-	if (normal_tex->load_from_file("examples/assets/normal_map_cornell_box/normal.png")) {
+	if (normal_tex->load_from_file("examples/assets/normal_map_cornell_box/Bricks092_1K-JPG_NormalGL.jpg")) {
 		textured_material->set_normal_texture(normal_tex);
 		ARE_LOG_INFO("Loaded normal texture");
 	} else {
 		ARE_LOG_WARN("Failed to load normal texture");
+	}
+
+	auto roughness_tex = std::make_shared<are::Texture>();
+	if (roughness_tex->load_from_file("examples/assets/normal_map_cornell_box/Bricks092_1K-JPG_Roughness.jpg")) {
+		textured_material->set_roughness_texture(roughness_tex);
+		ARE_LOG_INFO("Loaded roughness texture");
+	} else {
+		ARE_LOG_WARN("Failed to load roughness texture");
+	}
+
+	auto ao_tex = std::make_shared<are::Texture>();
+	if (ao_tex->load_from_file("examples/assets/normal_map_cornell_box/Bricks092_1K-JPG_AmbientOcclusion.jpg")) {
+		textured_material->set_ao_texture(ao_tex);
+		ARE_LOG_INFO("Loaded AO texture");
+	} else {
+		ARE_LOG_WARN("Failed to load AO texture");
 	}
 
 	uint textured_id = g_scene->add_material(textured_material);
@@ -298,7 +308,7 @@ void setup_cornell_box() {
 		Vec3(room_size, -room_size, -room_size),
 		Vec3(0.0f, 0.0f, 1.0f),
 		metal_id);
-		// white_id);
+	// white_id);
 	back_wall->upload_to_gpu();
 	g_scene->add_mesh(back_wall);
 

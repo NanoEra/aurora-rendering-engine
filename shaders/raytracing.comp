@@ -43,8 +43,8 @@ struct Material {
     float roughness;
     int type;
     float ior;
+    float ao;        // ambient occlusion
     float padding1;
-    float padding2;
     uint texture_handles[6];
 };
 
@@ -458,9 +458,9 @@ vec3 apply_normal_map(vec3 normal, vec2 texcoord, vec3 tangent, uint normal_hand
 void apply_material_textures(inout Material mat, inout vec3 normal, vec2 texcoord, vec3 tangent) {
     if (!u_enable_textures) return;
     
-    // Albedo texture
+    // Albedo texture (replace)
     if (mat.texture_handles[0] != 0) {
-        mat.albedo *= sample_texture_array(0, int(mat.texture_handles[0]), texcoord).rgb;
+        mat.albedo = sample_texture_array(0, int(mat.texture_handles[0]), texcoord).rgb;
     }
     
     // Normal map
@@ -468,25 +468,24 @@ void apply_material_textures(inout Material mat, inout vec3 normal, vec2 texcoor
         normal = apply_normal_map(normal, texcoord, tangent, mat.texture_handles[1]);
     }
     
-    // Metallic texture
+    // Metallic texture (replace)
     if (mat.texture_handles[2] != 0) {
-        mat.metallic *= sample_texture_array(2, int(mat.texture_handles[2]), texcoord).r;
+        mat.metallic = sample_texture_array(2, int(mat.texture_handles[2]), texcoord).r;
     }
     
-    // Roughness texture
+    // Roughness texture (replace)
     if (mat.texture_handles[3] != 0) {
-        mat.roughness *= sample_texture_array(3, int(mat.texture_handles[3]), texcoord).r;
+        mat.roughness = sample_texture_array(3, int(mat.texture_handles[3]), texcoord).r;
     }
     
-    // AO texture (multiply)
+    // AO texture (store in material, apply during lighting)
     if (mat.texture_handles[4] != 0) {
-        float ao = sample_texture_array(4, int(mat.texture_handles[4]), texcoord).r;
-        mat.albedo *= ao;
+        mat.ao = sample_texture_array(4, int(mat.texture_handles[4]), texcoord).r;
     }
     
-    // Emission texture (add)
+    // Emission texture (replace)
     if (mat.texture_handles[5] != 0) {
-        mat.emission += sample_texture_array(5, int(mat.texture_handles[5]), texcoord).rgb;
+        mat.emission = sample_texture_array(5, int(mat.texture_handles[5]), texcoord).rgb;
     }
 }
 
@@ -623,7 +622,8 @@ vec3 eval_direct_lighting(inout HitInfo hit, Material mat, inout uint seed) {
 
     float pdf_light = 1.0 / float(u_light_count);
     vec3 brdf = mat.albedo * INV_PI;
-    return brdf * radiance * n_dot_l / max(pdf_light, EPSILON);
+    // Apply AO to the final lighting
+    return brdf * radiance * n_dot_l * mat.ao / max(pdf_light, EPSILON);
 }
 
 // ============================================================================
@@ -641,6 +641,7 @@ Material fetch_material(uint material_id) {
     m.roughness = 0.5;
     m.type = MATERIAL_DIFFUSE;
     m.ior = 1.5;
+    m.ao = 1.0;  // default: no AO
     return m;
 }
 

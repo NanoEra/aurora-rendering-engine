@@ -61,7 +61,7 @@ Buffer::~Buffer() {
 
 bool Buffer::create(BufferType type, size_t size, const void* data, BufferUsage usage) {
     if (handle_ != INVALID_HANDLE) {
-        ARE_LOG_WARN("Buffer already created, releasing old buffer");
+        ARE_LOG_INFO("Buffer already created, releasing old buffer");
         release();
     }
     

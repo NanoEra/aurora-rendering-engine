@@ -20,7 +20,6 @@ layout(local_size_x = 16, local_size_y = 16) in;
 // G-Buffer inputs
 layout(binding = 0, rgba32f) uniform readonly image2D g_position;
 layout(binding = 1, rgba32f) uniform readonly image2D g_normal;
-layout(binding = 2, rgba8)   uniform readonly image2D g_albedo;
 
 // Material params + material id (for primary hit fast-path)
 layout(binding = 5, rgba32f) uniform readonly image2D g_material;

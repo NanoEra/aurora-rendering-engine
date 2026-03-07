@@ -182,7 +182,6 @@ void GBuffer::render(const Scene &scene, const Shader &shader) {
 			shader.set_float("u_roughness", material->get_roughness());
 			shader.set_uint("u_material_id", material_id);
 			shader.set_float("u_ior", material->get_ior());
-			shader.set_vec3("u_emission", material->get_emission());
 			shader.set_uint("u_material_type", static_cast<uint>(material->get_type()));
 
 			// Bind textures
@@ -193,15 +192,6 @@ void GBuffer::render(const Scene &scene, const Shader &shader) {
 				shader.set_int("u_has_albedo_map", 1);
 			} else {
 				shader.set_int("u_has_albedo_map", 0);
-			}
-
-			auto normal_tex = material->get_normal_texture();
-			if (normal_tex && normal_tex->is_valid()) {
-				normal_tex->bind(1);
-				shader.set_int("u_normal_map", 1);
-				shader.set_int("u_has_normal_map", 1);
-			} else {
-				shader.set_int("u_has_normal_map", 0);
 			}
 		}
 

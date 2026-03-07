@@ -228,8 +228,6 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 
 	// Set camera data
 	const Camera &camera = scene.get_camera();
-	compute_shader_->set_vec3("u_camera_position", camera.get_position());
-
 	Mat4 inv_vp = glm::inverse(camera.get_view_projection_matrix());
 	compute_shader_->set_mat4("u_inv_view_projection", inv_vp);
 
@@ -405,7 +403,6 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 void RayTracer::bind_gbuffer_(const GBuffer &gbuffer) {
 	glBindImageTexture(0, gbuffer.get_texture(GBUFFER_POSITION), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 	glBindImageTexture(1, gbuffer.get_texture(GBUFFER_NORMAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-	glBindImageTexture(2, gbuffer.get_texture(GBUFFER_ALBEDO), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA8);
 
 	glBindImageTexture(5, gbuffer.get_texture(GBUFFER_MATERIAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 	glBindImageTexture(6, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);

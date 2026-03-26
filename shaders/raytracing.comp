@@ -686,9 +686,6 @@ vec3 trace_path_primary_gbuffer(ivec2 pixel_coords, ivec2 image_size, inout uint
         apply_material_textures(mat0, hit0.normal, hit0.texcoord, hit0.tangent);
 
         radiance += throughput * mat0.emission;
-        if (mat0.type == MATERIAL_DIFFUSE) {
-            radiance += throughput * eval_direct_lighting(hit0, mat0, seed);
-        }
 
         ScatterResult sc0 = scatter_ray(ray, hit0, mat0, seed);
         if (!sc0.scattered) return radiance;
@@ -711,9 +708,6 @@ vec3 trace_path_primary_gbuffer(ivec2 pixel_coords, ivec2 image_size, inout uint
         apply_material_textures(mat, hit.normal, hit.texcoord, hit.tangent);
 
         radiance += throughput * mat.emission;
-        if (mat.type == MATERIAL_DIFFUSE) {
-            radiance += throughput * eval_direct_lighting(hit, mat, seed);
-        }
 
         ScatterResult sc = scatter_ray(ray, hit, mat, seed);
         if (!sc.scattered) break;

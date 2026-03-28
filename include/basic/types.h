@@ -27,6 +27,7 @@ using TextureHandle = uint;
 using BufferHandle = uint;
 using ShaderHandle = uint;
 using FramebufferHandle = uint;
+using VertexArrayHandle = uint;
 
 // Invalid handle constant
 constexpr uint INVALID_HANDLE = 0;

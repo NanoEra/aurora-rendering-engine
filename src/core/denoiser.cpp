@@ -1,5 +1,6 @@
 #include "core/denoiser.h"
 #include "basic/constants.h"
+#include "resource/resource_manager.h"
 #include "utils/logger.h"
 #include <glad/glad.h>
 
@@ -38,7 +39,7 @@ void Denoiser::release() {
     shader_.reset();
 
     if (output_texture_ != INVALID_HANDLE) {
-        glDeleteTextures(1, &output_texture_);
+        ResourceManager::instance().destroy_texture(output_texture_);
         output_texture_ = INVALID_HANDLE;
     }
 
@@ -53,7 +54,7 @@ void Denoiser::resize(uint width, uint height) {
     if (!initialized_) return;
 
     if (output_texture_ != INVALID_HANDLE) {
-        glDeleteTextures(1, &output_texture_);
+        ResourceManager::instance().destroy_texture(output_texture_);
         output_texture_ = INVALID_HANDLE;
     }
     create_output_texture_();
@@ -81,13 +82,14 @@ TextureHandle Denoiser::denoise(TextureHandle input_texture, int radius) {
 }
 
 void Denoiser::create_output_texture_() {
-    glGenTextures(1, &output_texture_);
-    glBindTexture(GL_TEXTURE_2D, output_texture_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width_, height_, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    ResourceManager &rm = ResourceManager::instance();
+    TextureDescription desc;
+    desc.width = width_;
+    desc.height = height_;
+    desc.format = TextureFormat::RGBA32F;
+    desc.filter = TextureFilter::NEAREST;
+    desc.wrap = TextureWrap::CLAMP_TO_EDGE;
+    output_texture_ = rm.create_texture(desc);
 }
 
 } // namespace are

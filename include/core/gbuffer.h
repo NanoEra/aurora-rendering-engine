@@ -74,15 +74,6 @@ private:
 	TextureHandle depth_texture_;
 
 	bool initialized_;
-
-	/*
-	 * @brief Create texture for G-Buffer attachment
-	 * @param internal_format OpenGL internal format
-	 * @param format OpenGL format
-	 * @param type OpenGL type
-	 * @return Texture handle
-	 */
-	TextureHandle create_texture_(uint internal_format, uint format, uint type);
 };
 
 } // namespace are

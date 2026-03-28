@@ -53,7 +53,7 @@ public:
 	bool compile_compute(const std::string &compute_source);
 
 	// Use/activate shader program
-	void use() const; // 改为const
+	void use() const;
 
 	// Release shader resources
 	void release();
@@ -63,63 +63,63 @@ public:
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_bool(const std::string &name, bool value) const; // 新增，const
+	void set_bool(const std::string &name, bool value) const;
 
 	/*
 	 * @brief Set uniform integer
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_int(const std::string &name, int value) const; // 改为const
+	void set_int(const std::string &name, int value) const;
 
 	/*
 	 * @brief Set uniform unsigned integer
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_uint(const std::string &name, uint value) const; // 改为const
+	void set_uint(const std::string &name, uint value) const;
 
 	/*
 	 * @brief Set uniform float
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_float(const std::string &name, float value) const; // 改为const
+	void set_float(const std::string &name, float value) const;
 
 	/*
 	 * @brief Set uniform vec2
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_vec2(const std::string &name, const Vec2 &value) const; // 改为const
+	void set_vec2(const std::string &name, const Vec2 &value) const;
 
 	/*
 	 * @brief Set uniform vec3
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_vec3(const std::string &name, const Vec3 &value) const; // 改为const
+	void set_vec3(const std::string &name, const Vec3 &value) const;
 
 	/*
 	 * @brief Set uniform vec4
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_vec4(const std::string &name, const Vec4 &value) const; // 改为const
+	void set_vec4(const std::string &name, const Vec4 &value) const;
 
 	/*
 	 * @brief Set uniform mat3
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_mat3(const std::string &name, const Mat3 &value) const; // 改为const
+	void set_mat3(const std::string &name, const Mat3 &value) const;
 
 	/*
 	 * @brief Set uniform mat4
 	 * @param name Uniform name
 	 * @param value Value
 	 */
-	void set_mat4(const std::string &name, const Mat4 &value) const; // 改为const
+	void set_mat4(const std::string &name, const Mat4 &value) const;
 
 	/*
 	 * @brief Get shader program handle
@@ -139,14 +139,14 @@ public:
 
 private:
 	ShaderHandle handle_;
-	mutable std::unordered_map<std::string, int> uniform_cache_; // 改为mutable
+	mutable std::unordered_map<std::string, int> uniform_cache_;
 
 	/*
 	 * @brief Get uniform location (with caching)
 	 * @param name Uniform name
 	 * @return Uniform location
 	 */
-	int get_uniform_location_(const std::string &name) const; // 改为const
+	int get_uniform_location_(const std::string &name) const;
 
 	/*
 	 * @brief Compile shader stage

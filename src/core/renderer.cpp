@@ -1,4 +1,5 @@
 #include "core/renderer.h"
+#include "resource/resource_manager.h"
 #include "utils/logger.h"
 #include <chrono>
 #include <glad/glad.h>
@@ -7,6 +8,7 @@ namespace are {
 
 Renderer::Renderer(const RendererConfig &config)
 	: config_(config)
+	, rt_output_texture_(INVALID_HANDLE)
 	, initialized_(false)
 	, frame_count_(0) {
 }
@@ -68,10 +70,14 @@ bool Renderer::initialize() {
 		ARE_LOG_ERROR("Failed to initialize denoiser");
 		return false;
 	}
-    
-    initialized_ = true;
-    ARE_LOG_INFO("Aurora Rendering Engine initialized successfully");
-    return true;
+
+	// Create ray tracing output texture (reused every frame)
+	ResourceManager &rm = ResourceManager::instance();
+	rt_output_texture_ = rm.create_texture(config_.width_, config_.height_, TextureFormat::RGBA32F);
+
+	initialized_ = true;
+	ARE_LOG_INFO("Aurora Rendering Engine initialized successfully");
+	return true;
 }
 
 void Renderer::shutdown() {
@@ -80,30 +86,18 @@ void Renderer::shutdown() {
 
 	ARE_LOG_INFO("Shutting down Aurora Rendering Engine...");
 
-	if (screen_blit_) {
-        screen_blit_->release();
-        screen_blit_.reset();
-    }
+	ResourceManager &rm = ResourceManager::instance();
 
-	if (raytracer_) {
-		raytracer_->release();
-		raytracer_.reset();
+	if (rt_output_texture_ != INVALID_HANDLE) {
+		rm.destroy_texture(rt_output_texture_);
+		rt_output_texture_ = INVALID_HANDLE;
 	}
 
-	if (gbuffer_) {
-		gbuffer_->release();
-		gbuffer_.reset();
-	}
-
-	if (shader_manager_) {
-		shader_manager_->release();
-		shader_manager_.reset();
-	}
-
-	if (denoiser_) {
-		denoiser_->release();
-		denoiser_.reset();
-	}
+	screen_blit_.reset();
+	raytracer_.reset();
+	gbuffer_.reset();
+	shader_manager_.reset();
+	denoiser_.reset();
 
 	initialized_ = false;
 	ARE_LOG_INFO("Aurora Rendering Engine shut down");
@@ -136,19 +130,8 @@ RenderStats Renderer::render(const Scene& scene, TextureHandle output_texture) {
     // Phase 2: Ray tracing pass
     auto raytrace_start = std::chrono::high_resolution_clock::now();
     
-    // Create output texture if not provided
-    TextureHandle rt_output = output_texture;
-    bool created_temp_texture = false;
-    
-    if (rt_output == 0) {
-        glGenTextures(1, &rt_output);
-        glBindTexture(GL_TEXTURE_2D, rt_output);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, config_.width_, config_.height_, 
-                    0, GL_RGBA, GL_FLOAT, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        created_temp_texture = true;
-    }
+    // Use output texture if provided, otherwise use internal texture
+    TextureHandle rt_output = (output_texture != 0) ? output_texture : rt_output_texture_;
     
     raytracer_->trace(scene, *gbuffer_, rt_output);
     
@@ -163,9 +146,8 @@ RenderStats Renderer::render(const Scene& scene, TextureHandle output_texture) {
 	}
 
     // Phase 4: Blit to screen if output is default framebuffer
-	if (created_temp_texture && output_texture == 0) {
+	if (output_texture == 0) {
 		screen_blit_->blit_fullscreen(final_output);
-		glDeleteTextures(1, &rt_output);
 	}
     
     // Calculate total frame time
@@ -194,6 +176,14 @@ void Renderer::resize(uint width, uint height) {
 	config_.height_ = height;
 
 	if (initialized_) {
+		ResourceManager &rm = ResourceManager::instance();
+
+		// Recreate ray tracing output texture
+		if (rt_output_texture_ != INVALID_HANDLE) {
+			rm.destroy_texture(rt_output_texture_);
+		}
+		rt_output_texture_ = rm.create_texture(width, height, TextureFormat::RGBA32F);
+
 		gbuffer_->resize(width, height);
 		raytracer_->resize(width, height);
 		denoiser_->resize(width, height);

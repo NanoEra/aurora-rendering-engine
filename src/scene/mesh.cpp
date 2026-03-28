@@ -1,4 +1,5 @@
 #include "scene/mesh.h"
+#include "resource/resource_manager.h"
 #include "utils/logger.h"
 #include <algorithm>
 #include <glad/glad.h>
@@ -52,21 +53,29 @@ bool Mesh::upload_to_gpu() {
 		return false;
 	}
 
+	ResourceManager &rm = ResourceManager::instance();
+
 	// Generate VAO
-	glGenVertexArrays(1, &vao_);
+	vao_ = rm.create_vertex_array();
 	glBindVertexArray(vao_);
 
 	// Generate and upload VBO
-	glGenBuffers(1, &vbo_);
+	BufferDescription vbo_desc;
+	vbo_desc.type = BufferType::VERTEX_BUFFER;
+	vbo_desc.usage = BufferUsage::STATIC_DRAW;
+	vbo_desc.size = vertices_.size() * sizeof(Vertex);
+	vbo_desc.data = vertices_.data();
+	vbo_ = rm.create_buffer(vbo_desc);
 	glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-	glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(Vertex),
-		vertices_.data(), GL_STATIC_DRAW);
 
 	// Generate and upload EBO
-	glGenBuffers(1, &ebo_);
+	BufferDescription ebo_desc;
+	ebo_desc.type = BufferType::INDEX_BUFFER;
+	ebo_desc.usage = BufferUsage::STATIC_DRAW;
+	ebo_desc.size = indices_.size() * sizeof(uint);
+	ebo_desc.data = indices_.data();
+	ebo_ = rm.create_buffer(ebo_desc);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_.size() * sizeof(uint),
-		indices_.data(), GL_STATIC_DRAW);
 
 	// Set vertex attributes
 	// Location 0: Position
@@ -100,18 +109,20 @@ void Mesh::release_gpu_resources() {
 	if (!uploaded_)
 		return;
 
+	ResourceManager &rm = ResourceManager::instance();
+
 	if (vao_ != 0) {
-		glDeleteVertexArrays(1, &vao_);
+		rm.destroy_vertex_array(vao_);
 		vao_ = 0;
 	}
 
 	if (vbo_ != 0) {
-		glDeleteBuffers(1, &vbo_);
+		rm.destroy_buffer(vbo_);
 		vbo_ = 0;
 	}
 
 	if (ebo_ != 0) {
-		glDeleteBuffers(1, &ebo_);
+		rm.destroy_buffer(ebo_);
 		ebo_ = 0;
 	}
 

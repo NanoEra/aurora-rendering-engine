@@ -74,6 +74,8 @@ private:
 	std::unique_ptr<ScreenBlit> screen_blit_;
 	std::unique_ptr<Denoiser> denoiser_;
 
+	TextureHandle rt_output_texture_;
+
 	bool initialized_;
 	uint frame_count_;
 };

@@ -1,4 +1,5 @@
 #include "core/screen_blit.h"
+#include "resource/resource_manager.h"
 #include "utils/logger.h"
 #include <glad/glad.h>
 
@@ -35,13 +36,15 @@ void ScreenBlit::release() {
     
 	shader_.reset();
     
+    ResourceManager &rm = ResourceManager::instance();
+    
     if (vao_ != 0) {
-        glDeleteVertexArrays(1, &vao_);
+        rm.destroy_vertex_array(vao_);
         vao_ = 0;
     }
     
     if (vbo_ != 0) {
-        glDeleteBuffers(1, &vbo_);
+        rm.destroy_buffer(vbo_);
         vbo_ = 0;
     }
     
@@ -96,12 +99,19 @@ void ScreenBlit::create_quad_() {
         -1.0f,  1.0f,  0.0f, 1.0f
     };
     
-    glGenVertexArrays(1, &vao_);
-    glGenBuffers(1, &vbo_);
+    ResourceManager &rm = ResourceManager::instance();
     
+    vao_ = rm.create_vertex_array();
     glBindVertexArray(vao_);
+    
+    BufferDescription vbo_desc;
+    vbo_desc.type = BufferType::VERTEX_BUFFER;
+    vbo_desc.usage = BufferUsage::STATIC_DRAW;
+    vbo_desc.size = sizeof(vertices);
+    vbo_desc.data = vertices;
+    vbo_ = rm.create_buffer(vbo_desc);
+    
     glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
     
     // Position attribute
     glEnableVertexAttribArray(0);

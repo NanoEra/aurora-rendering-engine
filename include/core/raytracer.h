@@ -95,7 +95,6 @@ private:
 
 	std::shared_ptr<Shader> compute_shader_;
 	TextureHandle accumulation_texture_;
-	BufferHandle scene_buffer_;
 	BufferHandle material_buffer_;
 	BufferHandle light_buffer_;
 

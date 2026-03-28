@@ -1,4 +1,5 @@
 #include "core/gbuffer.h"
+#include "resource/resource_manager.h"
 #include "utils/logger.h"
 #include <glad/glad.h>
 
@@ -25,49 +26,58 @@ bool GBuffer::initialize() {
 		return true;
 	}
 
+	ResourceManager &rm = ResourceManager::instance();
+
+	// Create framebuffer
 	glGenFramebuffers(1, &fbo_);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo_);
 
-	textures_[GBUFFER_POSITION] = create_texture_(GL_RGBA32F, GL_RGBA, GL_FLOAT);
-	textures_[GBUFFER_NORMAL] = create_texture_(GL_RGBA32F, GL_RGBA, GL_FLOAT);
-	textures_[GBUFFER_ALBEDO] = create_texture_(GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE);
+	// Create color attachments using ResourceManager
+	TextureDescription tex_desc;
+	tex_desc.width = width_;
+	tex_desc.height = height_;
+	tex_desc.filter = TextureFilter::NEAREST;
+	tex_desc.wrap = TextureWrap::CLAMP_TO_EDGE;
 
-	// New: material params (metallic, roughness, ior, type)
-	textures_[GBUFFER_MATERIAL] = create_texture_(GL_RGBA32F, GL_RGBA, GL_FLOAT);
+	tex_desc.format = TextureFormat::RGBA32F;
+	textures_[GBUFFER_POSITION] = rm.create_texture(tex_desc);
 
-	// New: material id (integer)
-	textures_[GBUFFER_MATERIAL_ID] = create_texture_(GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT);
+	tex_desc.format = TextureFormat::RGBA32F;
+	textures_[GBUFFER_NORMAL] = rm.create_texture(tex_desc);
 
-	// New: texcoord + tangent (xy = texcoord, zw = tangent)
-	textures_[GBUFFER_TEXCOORD] = create_texture_(GL_RGBA32F, GL_RGBA, GL_FLOAT);
+	tex_desc.format = TextureFormat::RGBA8;
+	textures_[GBUFFER_ALBEDO] = rm.create_texture(tex_desc);
 
-	// New: tangent (xyz = tangent, w = unused)
-	textures_[GBUFFER_TANGENT] = create_texture_(GL_RGBA32F, GL_RGBA, GL_FLOAT);
+	tex_desc.format = TextureFormat::RGBA32F;
+	textures_[GBUFFER_MATERIAL] = rm.create_texture(tex_desc);
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_POSITION,
-		GL_TEXTURE_2D, textures_[GBUFFER_POSITION], 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_NORMAL,
-		GL_TEXTURE_2D, textures_[GBUFFER_NORMAL], 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_ALBEDO,
-		GL_TEXTURE_2D, textures_[GBUFFER_ALBEDO], 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_MATERIAL,
-		GL_TEXTURE_2D, textures_[GBUFFER_MATERIAL], 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_MATERIAL_ID,
-		GL_TEXTURE_2D, textures_[GBUFFER_MATERIAL_ID], 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_TEXCOORD,
-		GL_TEXTURE_2D, textures_[GBUFFER_TEXCOORD], 0);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + GBUFFER_TANGENT,
-		GL_TEXTURE_2D, textures_[GBUFFER_TANGENT], 0);
+	textures_[GBUFFER_MATERIAL_ID] = rm.create_texture(width_, height_, TextureFormat::R32F);
 
-	glGenTextures(1, &depth_texture_);
-	glBindTexture(GL_TEXTURE_2D, depth_texture_);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, width_, height_, 0,
-		GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	tex_desc.format = TextureFormat::RGBA32F;
+	textures_[GBUFFER_TEXCOORD] = rm.create_texture(tex_desc);
+
+	tex_desc.format = TextureFormat::RGBA32F;
+	textures_[GBUFFER_TANGENT] = rm.create_texture(tex_desc);
+
+	// Attach color textures to framebuffer
+	for (int i = 0; i < GBUFFER_COUNT; ++i) {
+		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i,
+			GL_TEXTURE_2D, textures_[i], 0);
+	}
+
+	// Create depth texture using ResourceManager
+	TextureDescription depth_desc;
+	depth_desc.width = width_;
+	depth_desc.height = height_;
+	depth_desc.format = TextureFormat::DEPTH24_STENCIL8;
+	depth_desc.filter = TextureFilter::NEAREST;
+	depth_desc.wrap = TextureWrap::CLAMP_TO_EDGE;
+	depth_texture_ = rm.create_texture(depth_desc);
+
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT,
 		GL_TEXTURE_2D, depth_texture_, 0);
 
+	// Set draw buffers
 	GLenum draw_buffers[GBUFFER_COUNT] = {
 		GL_COLOR_ATTACHMENT0 + GBUFFER_POSITION,
 		GL_COLOR_ATTACHMENT0 + GBUFFER_NORMAL,
@@ -96,6 +106,8 @@ void GBuffer::release() {
 	if (!initialized_)
 		return;
 
+	ResourceManager &rm = ResourceManager::instance();
+
 	if (fbo_ != INVALID_HANDLE) {
 		glDeleteFramebuffers(1, &fbo_);
 		fbo_ = INVALID_HANDLE;
@@ -103,30 +115,18 @@ void GBuffer::release() {
 
 	for (int i = 0; i < GBUFFER_COUNT; ++i) {
 		if (textures_[i] != INVALID_HANDLE) {
-			glDeleteTextures(1, &textures_[i]);
+			rm.destroy_texture(textures_[i]);
 			textures_[i] = INVALID_HANDLE;
 		}
 	}
 
 	if (depth_texture_ != INVALID_HANDLE) {
-		glDeleteTextures(1, &depth_texture_);
+		rm.destroy_texture(depth_texture_);
 		depth_texture_ = INVALID_HANDLE;
 	}
 
 	initialized_ = false;
 	ARE_LOG_INFO("GBuffer released");
-}
-
-TextureHandle GBuffer::create_texture_(uint internal_format, uint format, uint type) {
-	TextureHandle texture;
-	glGenTextures(1, &texture);
-	glBindTexture(GL_TEXTURE_2D, texture);
-	glTexImage2D(GL_TEXTURE_2D, 0, internal_format, width_, height_, 0, format, type, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	return texture;
 }
 
 void GBuffer::render(const Scene &scene, const Shader &shader) {

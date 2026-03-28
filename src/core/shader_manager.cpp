@@ -32,9 +32,6 @@ bool ShaderManager::initialize() {
 void ShaderManager::release() {
     if (!initialized_) return;
 
-    for (auto& pair : shader_cache_) {
-        if (pair.second) pair.second->release();
-    }
     shader_cache_.clear();
 
     gbuffer_shader_.reset();
@@ -110,7 +107,7 @@ bool ShaderManager::load_builtin_shaders_() {
         ARE_LOG_ERROR("Failed to load screen blit shader");
         return false;
     }
-    shader_cache_["screen_blit"] = denoise_shader_;
+    shader_cache_["screen_blit"] = screen_blit_shader_;
     ARE_LOG_INFO("Screen blit shader loaded successfully");
 
 	// Load ray tracing shader

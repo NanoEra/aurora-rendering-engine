@@ -1,5 +1,6 @@
 #include "core/raytracer.h"
 #include "basic/constants.h"
+#include "resource/resource_manager.h"
 #include "utils/logger.h"
 #include <glad/glad.h>
 
@@ -22,7 +23,6 @@ RayTracer::RayTracer(uint width, uint height, const RayTracerConfig &config)
 	, height_(height)
 	, config_(config)
 	, accumulation_texture_(INVALID_HANDLE)
-	, scene_buffer_(INVALID_HANDLE)
 	, material_buffer_(INVALID_HANDLE)
 	, light_buffer_(INVALID_HANDLE)
 	, bvh_(nullptr)
@@ -43,33 +43,27 @@ bool RayTracer::initialize(const std::shared_ptr<Shader> &shader) {
 		return true;
 	}
 
+	ResourceManager &rm = ResourceManager::instance();
+
 	compute_shader_ = shader;
 
 	// Create accumulation texture
-	glGenTextures(1, &accumulation_texture_);
-	glBindTexture(GL_TEXTURE_2D, accumulation_texture_);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width_, height_, 0, GL_RGBA, GL_FLOAT, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	accumulation_texture_ = rm.create_texture(width_, height_, TextureFormat::RGBA32F);
 
 	// Create shader storage buffers
-	glGenBuffers(1, &material_buffer_);
-	glGenBuffers(1, &light_buffer_);
+	BufferDescription ssbo_desc;
+	ssbo_desc.type = BufferType::SHADER_STORAGE_BUFFER;
+	ssbo_desc.usage = BufferUsage::DYNAMIC_DRAW;
+	ssbo_desc.size = 1;
+	ssbo_desc.data = nullptr;
+	material_buffer_ = rm.create_buffer(ssbo_desc);
+	light_buffer_ = rm.create_buffer(ssbo_desc);
 
 	// Initialize texture arrays (empty for now)
 	for (int i = 0; i < 6; i++) {
 		texture_arrays_[i] = 0;
 		texture_array_sizes_[i] = 0;
-		glGenTextures(1, &texture_arrays_[i]);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[i]);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	}
-	glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 
 	// Initialize BVH if enabled
 	if (config_.use_bvh_) {
@@ -85,26 +79,28 @@ void RayTracer::release() {
 	if (!initialized_)
 		return;
 
+	ResourceManager &rm = ResourceManager::instance();
+
 	if (accumulation_texture_ != INVALID_HANDLE) {
-		glDeleteTextures(1, &accumulation_texture_);
+		rm.destroy_texture(accumulation_texture_);
 		accumulation_texture_ = INVALID_HANDLE;
 	}
 
 	// Release texture arrays
 	for (int i = 0; i < 6; i++) {
 		if (texture_arrays_[i] != 0) {
-			glDeleteTextures(1, &texture_arrays_[i]);
+			rm.destroy_texture_array(texture_arrays_[i]);
 			texture_arrays_[i] = 0;
 		}
 	}
 
 	if (material_buffer_ != INVALID_HANDLE) {
-		glDeleteBuffers(1, &material_buffer_);
+		rm.destroy_buffer(material_buffer_);
 		material_buffer_ = INVALID_HANDLE;
 	}
 
 	if (light_buffer_ != INVALID_HANDLE) {
-		glDeleteBuffers(1, &light_buffer_);
+		rm.destroy_buffer(light_buffer_);
 		light_buffer_ = INVALID_HANDLE;
 	}
 
@@ -254,18 +250,14 @@ void RayTracer::resize(uint width, uint height) {
 	height_ = height;
 
 	if (initialized_) {
+		ResourceManager &rm = ResourceManager::instance();
+
 		// Recreate accumulation texture
 		if (accumulation_texture_ != INVALID_HANDLE) {
-			glDeleteTextures(1, &accumulation_texture_);
+			rm.destroy_texture(accumulation_texture_);
 		}
 
-		glGenTextures(1, &accumulation_texture_);
-		glBindTexture(GL_TEXTURE_2D, accumulation_texture_);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width_, height_, 0, GL_RGBA, GL_FLOAT, nullptr);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		accumulation_texture_ = rm.create_texture(width_, height_, TextureFormat::RGBA32F);
 
 		reset_accumulation();
 	}
@@ -439,8 +431,16 @@ void RayTracer::build_texture_arrays_(const Scene &scene) {
 		}
 	}
 
+	ResourceManager &rm = ResourceManager::instance();
+
 	// Build arrays for each slot
 	for (int slot = 0; slot < 6; slot++) {
+		// Destroy previous texture array if exists
+		if (texture_arrays_[slot] != 0) {
+			rm.destroy_texture_array(texture_arrays_[slot]);
+			texture_arrays_[slot] = 0;
+		}
+
 		if (textures[slot].empty()) {
 			texture_array_sizes_[slot] = 0;
 			continue;
@@ -448,89 +448,25 @@ void RayTracer::build_texture_arrays_(const Scene &scene) {
 
 		texture_array_sizes_[slot] = static_cast<uint>(textures[slot].size());
 
-		// Get dimensions from first texture (assume all same size)
-		int width = textures[slot][0]->get_width();
-		int height = textures[slot][0]->get_height();
+		// Create texture array using ResourceManager
+		TextureArrayDescription desc;
+		desc.textures = textures[slot];
+		desc.filter = TextureFilter::LINEAR;
+		desc.wrap = TextureWrap::REPEAT;
 
-		// Create texture array
-		glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[slot]);
-		glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, width, height,
-			static_cast<int>(textures[slot].size()), 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		texture_arrays_[slot] = rm.create_texture_array(desc);
 
-		// Copy each texture to array layer and set indices on materials
+		// Set texture index on all materials using each texture
 		for (size_t i = 0; i < textures[slot].size(); i++) {
-			auto &tex = textures[slot][i];
-			GLuint tex_handle = tex->get_handle();
-			if (tex_handle != 0) {
-				// Get original texture format
-				TextureFormat orig_format = tex->get_format();
-				int orig_width = tex->get_width();
-				int orig_height = tex->get_height();
-
-				// Get the correct format for reading
-				GLenum orig_gl_format = GL_RGBA;
-				int channels = 4;
-				switch (orig_format) {
-				case TextureFormat::R8:
-					orig_gl_format = GL_RED;
-					channels = 1;
-					break;
-				case TextureFormat::RG8:
-					orig_gl_format = GL_RG;
-					channels = 2;
-					break;
-				case TextureFormat::RGB8:
-					orig_gl_format = GL_RGB;
-					channels = 3;
-					break;
-				case TextureFormat::RGBA8:
-					orig_gl_format = GL_RGBA;
-					channels = 4;
-					break;
-				default:
-					orig_gl_format = GL_RGBA;
-					channels = 4;
-					break;
-				}
-
-				// Read texture data with correct format
-				std::vector<uint8_t> orig_pixels(orig_width * orig_height * channels);
-				glBindTexture(GL_TEXTURE_2D, tex_handle);
-				glGetTexImage(GL_TEXTURE_2D, 0, orig_gl_format, GL_UNSIGNED_BYTE, orig_pixels.data());
-				glBindTexture(GL_TEXTURE_2D, 0);
-
-				// Convert to RGBA for texture array (always RGBA8)
-				std::vector<uint8_t> pixels(orig_width * orig_height * 4, 255);
-				for (int y = 0; y < orig_height; y++) {
-					for (int x = 0; x < orig_width; x++) {
-						int src_idx = (y * orig_width + x) * channels;
-						int dst_idx = (y * orig_width + x) * 4;
-						pixels[dst_idx + 0] = orig_pixels[src_idx + 0];
-						pixels[dst_idx + 1] = (channels >= 2) ? orig_pixels[src_idx + 1] : orig_pixels[src_idx + 0];
-						pixels[dst_idx + 2] = (channels >= 3) ? orig_pixels[src_idx + 2] : orig_pixels[src_idx + 0];
-						pixels[dst_idx + 3] = (channels >= 4) ? orig_pixels[src_idx + 3] : 255;
-					}
-				}
-
-				glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, static_cast<int>(i),
-					width, height, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-
-				// Set texture index on all materials using this texture
-				// Index is i+1 because 0 means "no texture" in the shader
-				uint32_t array_index = static_cast<uint32_t>(i) + 1;
-				for (const auto &mat : materials) {
-					if (mat->get_texture(static_cast<TextureSlot>(slot)).get() == tex.get()) {
-						mat->set_texture_index(static_cast<TextureSlot>(slot), array_index);
-					}
+			// Index is i+1 because 0 means "no texture" in the shader
+			uint32_t array_index = static_cast<uint32_t>(i) + 1;
+			for (const auto &mat : materials) {
+				if (mat->get_texture(static_cast<TextureSlot>(slot)).get() == textures[slot][i].get()) {
+					mat->set_texture_index(static_cast<TextureSlot>(slot), array_index);
 				}
 			}
 		}
-
-		// Generate mipmaps
-		glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 	}
-
-	glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
 } // namespace are

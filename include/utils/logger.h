@@ -1,5 +1,5 @@
-#ifndef ARE_INCLUDE_CORE_LOGGER_H
-#define ARE_INCLUDE_CORE_LOGGER_H
+#ifndef ARE_INCLUDE_UTILS_LOGGER_H
+#define ARE_INCLUDE_UTILS_LOGGER_H
 
 #include <memory>
 #include <string>
@@ -19,18 +19,18 @@ enum class LogLevel {
 // Thread-safe logging system
 class Logger {
 public:
-	/**
+	/*
 	 * @brief Initialize the logging system
 	 * @param min_level Minimum log level to display
 	 */
 	static void init(LogLevel min_level = LogLevel::ARE_LOG_INFO);
 
-	/**
+	/*
 	 * @brief Shutdown the logging system
 	 */
 	static void shutdown();
 
-	/**
+	/*
 	 * @brief Log a message with file/function/line information
 	 * @param level Log severity level
 	 * @param file Source file name
@@ -41,7 +41,7 @@ public:
 	static void log(LogLevel level, const char *file, const char *func,
 		int line, const std::string &message);
 
-	/**
+	/*
 	 * @brief Set minimum log level
 	 * @param level Minimum log level to display
 	 */
@@ -62,4 +62,4 @@ private:
 #define ARE_LOG_ERROR(msg) are::Logger::log(are::LogLevel::ARE_LOG_ERROR, __FILE__, __func__, __LINE__, msg)
 #define ARE_LOG_CRITICAL(msg) are::Logger::log(are::LogLevel::ARE_LOG_CRITICAL, __FILE__, __func__, __LINE__, msg)
 
-#endif // ARE_INCLUDE_CORE_LOGGER_H
+#endif // ARE_INCLUDE_UTILS_LOGGER_H

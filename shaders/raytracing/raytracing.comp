@@ -1,0 +1,171 @@
+#version 430 core
+
+// Include shared modules
+#include "../include/common.glsl"
+#include "../include/structs.glsl"
+#include "../include/math.glsl"
+#include "../include/rng.glsl"
+#include "../include/sampling.glsl"
+
+// Workgroup size
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// G-Buffer inputs
+layout(binding = 0, rgba32f) uniform readonly image2D g_position;
+layout(binding = 1, rgba32f) uniform readonly image2D g_normal;
+layout(binding = 5, rgba32f) uniform readonly image2D g_material;
+layout(binding = 6, r32ui)   uniform readonly uimage2D g_material_id;
+layout(binding = 7, rgba32f) uniform readonly image2D g_texcoord;
+layout(binding = 8, rgba32f) uniform readonly image2D g_tangent;
+
+// Output
+layout(binding = 3, rgba32f) uniform image2D output_image;
+layout(binding = 4, rgba32f) uniform image2D accumulation_image;
+
+// SSBO bindings
+layout(std430, binding = 0) readonly buffer MaterialBuffer { Material materials[]; };
+layout(std430, binding = 1) readonly buffer LightBuffer { Light lights[]; };
+layout(std430, binding = 2) readonly buffer BVHNodeBuffer { BVHNodeGpu bvh_nodes[]; };
+layout(std430, binding = 3) readonly buffer TriangleBuffer { TriangleGpu bvh_tris[]; };
+
+// Uniforms
+uniform uint u_frame_count;
+uniform uint u_samples_per_pixel;
+uniform uint u_max_depth;
+uniform uint u_light_count;
+uniform mat4 u_inv_view_projection;
+uniform bool u_enable_accumulation;
+uniform bool u_use_bvh;
+uniform uint u_bvh_node_count;
+uniform bool u_enable_textures;
+
+// Texture arrays
+layout(binding = 10) uniform sampler2DArray u_texture_albedo_array;
+layout(binding = 11) uniform sampler2DArray u_texture_normal_array;
+layout(binding = 12) uniform sampler2DArray u_texture_metallic_array;
+layout(binding = 13) uniform sampler2DArray u_texture_roughness_array;
+layout(binding = 14) uniform sampler2DArray u_texture_ao_array;
+layout(binding = 15) uniform sampler2DArray u_texture_emission_array;
+
+// Include material, BVH, and lighting modules (needs uniform declarations above)
+#include "../include/material.glsl"
+#include "../include/bvh.glsl"
+#include "../include/lighting.glsl"
+
+// Generate camera ray (center pixel, no jitter)
+Ray generate_camera_ray(ivec2 pixel_coords, ivec2 image_size) {
+    vec2 uv = (vec2(pixel_coords) + vec2(0.5)) / vec2(image_size);
+    vec2 ndc = uv * 2.0 - 1.0;
+
+    vec4 p_near = u_inv_view_projection * vec4(ndc, 0.0, 1.0);
+    vec4 p_far  = u_inv_view_projection * vec4(ndc, 1.0, 1.0);
+    vec3 near_ws = p_near.xyz / p_near.w;
+    vec3 far_ws  = p_far.xyz / p_far.w;
+
+    Ray r;
+    r.origin = near_ws;
+    r.direction = normalize(far_ws - near_ws);
+    return r;
+}
+
+// Path tracing with G-Buffer acceleration for primary ray
+vec3 trace_path_primary_gbuffer(ivec2 pixel_coords, ivec2 image_size, inout uint seed) {
+    Ray ray = generate_camera_ray(pixel_coords, image_size);
+
+    vec3 radiance = vec3(0.0);
+    vec3 throughput = vec3(1.0);
+
+    // Depth 0: try G-Buffer hit first
+    HitInfo hit0 = trace_primary_gbuffer(ray, pixel_coords);
+    if (hit0.hit) {
+        Material mat0 = fetch_material(hit0.material_id);
+        
+        if (hit0.material_type >= 0) {
+            mat0.type = hit0.material_type;
+        }
+        
+        apply_material_textures(mat0, hit0.normal, hit0.texcoord, hit0.tangent);
+
+        radiance += throughput * mat0.emission;
+
+        ScatterResult sc0 = scatter_ray(ray, hit0, mat0, seed);
+        if (!sc0.scattered) return radiance;
+
+        throughput *= sc0.attenuation;
+        ray = sc0.scattered_ray;
+    }
+
+    // Subsequent bounces: BVH
+    for (uint depth = (hit0.hit ? 1u : 0u); depth < u_max_depth; ++depth) {
+        HitInfo hit = trace_ray_bvh(ray);
+        if (!hit.hit) {
+            radiance += throughput * environment_color(ray.direction);
+            break;
+        }
+
+        Material mat = fetch_material(hit.material_id);
+        apply_material_textures(mat, hit.normal, hit.texcoord, hit.tangent);
+
+        radiance += throughput * mat.emission;
+
+        ScatterResult sc = scatter_ray(ray, hit, mat, seed);
+        if (!sc.scattered) break;
+
+        throughput *= sc.attenuation;
+
+        if (depth > 3u) {
+            float p = max(throughput.r, max(throughput.g, throughput.b));
+            p = clamp(p, 0.0, 0.95);
+            if (p < RR_THRESHOLD || random_float(seed) > p) break;
+            throughput /= p;
+        }
+
+        ray = sc.scattered_ray;
+
+        if (all(lessThan(throughput, vec3(EPSILON)))) break;
+    }
+
+    return radiance;
+}
+
+// ACES Filmic Tone Mapping
+vec3 aces_tonemap(vec3 x) {
+    float a = 2.51;
+    float b = 0.03;
+    float c = 2.43;
+    float d = 0.59;
+    float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+void main() {
+    ivec2 pixel_coords = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 image_size = imageSize(output_image);
+    if (pixel_coords.x >= image_size.x || pixel_coords.y >= image_size.y) return;
+
+    uint base_seed = uint(pixel_coords.x) + uint(pixel_coords.y) * uint(image_size.x);
+    uint seed = base_seed + u_frame_count * 719393u;
+
+    vec3 color = vec3(0.0);
+    uint spp = max(u_samples_per_pixel, 1u);
+
+    for (uint s = 0u; s < spp; ++s) {
+        color += trace_path_primary_gbuffer(pixel_coords, image_size, seed);
+    }
+    color /= float(spp);
+
+    color = clamp(color, vec3(0.0), vec3(100.0));
+
+    vec3 accumulation_color = color;
+    
+    if (u_enable_accumulation && u_frame_count > 0u) {
+        vec3 accumulated = imageLoad(accumulation_image, pixel_coords).rgb;
+        float w = 1.0 / float(u_frame_count + 1u);
+        accumulation_color = mix(accumulated, color, w);
+    }
+    
+    vec3 output_color = aces_tonemap(accumulation_color);
+
+    imageStore(accumulation_image, pixel_coords, vec4(accumulation_color, 1.0));
+    imageStore(output_image, pixel_coords, vec4(output_color, 1.0));
+}

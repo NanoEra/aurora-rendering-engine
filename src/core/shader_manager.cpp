@@ -4,133 +4,135 @@
 namespace are {
 
 ShaderManager::ShaderManager()
-    : initialized_(false) {
+	: initialized_(false) {
 }
 
 ShaderManager::~ShaderManager() {
-    release();
+	release();
 }
 
 bool ShaderManager::initialize() {
-    if (initialized_) {
-        ARE_LOG_WARN("ShaderManager already initialized");
-        return true;
-    }
-    
-    ARE_LOG_INFO("Loading built-in shaders...");
-    
-    if (!load_builtin_shaders_()) {
-        ARE_LOG_ERROR("Failed to load built-in shaders");
-        return false;
-    }
-    
-    initialized_ = true;
-    ARE_LOG_INFO("ShaderManager initialized successfully");
-    return true;
+	if (initialized_) {
+		ARE_LOG_WARN("ShaderManager already initialized");
+		return true;
+	}
+
+	ARE_LOG_INFO("Loading built-in shaders...");
+
+	if (!load_builtin_shaders_()) {
+		ARE_LOG_ERROR("Failed to load built-in shaders");
+		return false;
+	}
+
+	initialized_ = true;
+	ARE_LOG_INFO("ShaderManager initialized successfully");
+	return true;
 }
 
 void ShaderManager::release() {
-    if (!initialized_) return;
+	if (!initialized_)
+		return;
 
-    shader_cache_.clear();
+	shader_cache_.clear();
 
-    gbuffer_shader_.reset();
+	gbuffer_shader_.reset();
 	screen_blit_shader_.reset();
-    raytracing_shader_.reset();
+	raytracing_shader_.reset();
 	denoise_shader_.reset();
 
-    initialized_ = false;
-    ARE_LOG_INFO("ShaderManager released");
+	initialized_ = false;
+	ARE_LOG_INFO("ShaderManager released");
 }
 
-std::shared_ptr<Shader> ShaderManager::load_shader(const std::string& name,
-                                                   const std::string& vertex_path,
-                                                   const std::string& fragment_path) {
-    auto it = shader_cache_.find(name);
-    if (it != shader_cache_.end()) {
-        ARE_LOG_INFO("Shader '" + name + "' loaded from cache");
-        return it->second;
-    }
+std::shared_ptr<Shader> ShaderManager::load_shader(const std::string &name,
+	const std::string &vertex_path,
+	const std::string &fragment_path) {
+	auto it = shader_cache_.find(name);
+	if (it != shader_cache_.end()) {
+		ARE_LOG_INFO("Shader '" + name + "' loaded from cache");
+		return it->second;
+	}
 
-    auto shader = std::make_shared<Shader>();
-    if (!shader->load(vertex_path, fragment_path)) {
-        ARE_LOG_ERROR("Failed to load shader '" + name + "'");
-        return nullptr;
-    }
+	auto shader = std::make_shared<Shader>();
+	if (!shader->load(vertex_path, fragment_path)) {
+		ARE_LOG_ERROR("Failed to load shader '" + name + "'");
+		return nullptr;
+	}
 
-    shader_cache_[name] = shader;
-    ARE_LOG_INFO("Shader '" + name + "' loaded successfully");
-    return shader;
+	shader_cache_[name] = shader;
+	ARE_LOG_INFO("Shader '" + name + "' loaded successfully");
+	return shader;
 }
 
-std::shared_ptr<Shader> ShaderManager::load_compute_shader(const std::string& name,
-                                                           const std::string& compute_path) {
-    auto it = shader_cache_.find(name);
-    if (it != shader_cache_.end()) {
-        ARE_LOG_INFO("Compute shader '" + name + "' loaded from cache");
-        return it->second;
-    }
+std::shared_ptr<Shader> ShaderManager::load_compute_shader(const std::string &name,
+	const std::string &compute_path) {
+	auto it = shader_cache_.find(name);
+	if (it != shader_cache_.end()) {
+		ARE_LOG_INFO("Compute shader '" + name + "' loaded from cache");
+		return it->second;
+	}
 
-    auto shader = std::make_shared<Shader>();
-    if (!shader->load_compute(compute_path)) {
-        ARE_LOG_ERROR("Failed to load compute shader '" + name + "'");
-        return nullptr;
-    }
+	auto shader = std::make_shared<Shader>();
+	if (!shader->load_compute(compute_path)) {
+		ARE_LOG_ERROR("Failed to load compute shader '" + name + "'");
+		return nullptr;
+	}
 
-    shader_cache_[name] = shader;
-    ARE_LOG_INFO("Compute shader '" + name + "' loaded successfully");
-    return shader;
+	shader_cache_[name] = shader;
+	ARE_LOG_INFO("Compute shader '" + name + "' loaded successfully");
+	return shader;
 }
 
-std::shared_ptr<Shader> ShaderManager::get_shader(const std::string& name) const {
-    auto it = shader_cache_.find(name);
-    if (it != shader_cache_.end()) return it->second;
+std::shared_ptr<Shader> ShaderManager::get_shader(const std::string &name) const {
+	auto it = shader_cache_.find(name);
+	if (it != shader_cache_.end())
+		return it->second;
 
-    ARE_LOG_WARN("Shader '" + name + "' not found in cache");
-    return nullptr;
+	ARE_LOG_WARN("Shader '" + name + "' not found in cache");
+	return nullptr;
 }
 
 bool ShaderManager::load_builtin_shaders_() {
 	// Load G-buffer shader
 	ARE_LOG_INFO("Loading G-buffer shaders..");
-    gbuffer_shader_ = std::make_shared<Shader>();
-    if (!gbuffer_shader_->load("shaders/gbuffer.vert", "shaders/gbuffer.frag")) {
-        ARE_LOG_ERROR("Failed to load G-Buffer shader");
-        return false;
-    }
-    shader_cache_["gbuffer"] = gbuffer_shader_;
+	gbuffer_shader_ = std::make_shared<Shader>();
+	if (!gbuffer_shader_->load("shaders/gbuffer/gbuffer.vert", "shaders/gbuffer/gbuffer.frag")) {
+		ARE_LOG_ERROR("Failed to load G-Buffer shader");
+		return false;
+	}
+	shader_cache_["gbuffer"] = gbuffer_shader_;
 
 	// Load screen bliting shader
 	ARE_LOG_INFO("Loading screen blit shaders...");
-    screen_blit_shader_ = std::make_shared<Shader>();
-    if (!screen_blit_shader_->load("shaders/screen_blit.vert", "shaders/screen_blit.frag")) {
-        ARE_LOG_ERROR("Failed to load screen blit shader");
-        return false;
-    }
-    shader_cache_["screen_blit"] = screen_blit_shader_;
-    ARE_LOG_INFO("Screen blit shader loaded successfully");
+	screen_blit_shader_ = std::make_shared<Shader>();
+	if (!screen_blit_shader_->load("shaders/postprocess/screen_blit.vert", "shaders/postprocess/screen_blit.frag")) {
+		ARE_LOG_ERROR("Failed to load screen blit shader");
+		return false;
+	}
+	shader_cache_["screen_blit"] = screen_blit_shader_;
+	ARE_LOG_INFO("Screen blit shader loaded successfully");
 
 	// Load ray tracing shader
-    ARE_LOG_INFO("Loading ray tracing compute shader...");
-    raytracing_shader_ = std::make_shared<Shader>();
-    if (!raytracing_shader_->load_compute("shaders/raytracing.comp")) {
-        ARE_LOG_ERROR("Failed to load ray tracing shader");
-        return false;
-    }
-    shader_cache_["raytracing"] = raytracing_shader_;
-    ARE_LOG_INFO("Ray tracing shader loaded successfully");
+	ARE_LOG_INFO("Loading ray tracing compute shader...");
+	raytracing_shader_ = std::make_shared<Shader>();
+	if (!raytracing_shader_->load_compute("shaders/raytracing/raytracing.comp")) {
+		ARE_LOG_ERROR("Failed to load ray tracing shader");
+		return false;
+	}
+	shader_cache_["raytracing"] = raytracing_shader_;
+	ARE_LOG_INFO("Ray tracing shader loaded successfully");
 
 	// Load denoising shader
 	ARE_LOG_INFO("Loading denoise compute shader...");
-    denoise_shader_ = std::make_shared<Shader>();
-    if (!denoise_shader_->load_compute("shaders/denoiser.comp")) {
-        ARE_LOG_ERROR("Failed to load denoise shader");
-        return false;
-    }
-    shader_cache_["denoise"] = denoise_shader_;
-    ARE_LOG_INFO("Denoise shader loaded successfully");
+	denoise_shader_ = std::make_shared<Shader>();
+	if (!denoise_shader_->load_compute("shaders/postprocess/denoiser.comp")) {
+		ARE_LOG_ERROR("Failed to load denoise shader");
+		return false;
+	}
+	shader_cache_["denoise"] = denoise_shader_;
+	ARE_LOG_INFO("Denoise shader loaded successfully");
 
-    return true;
+	return true;
 }
 
 } // namespace are

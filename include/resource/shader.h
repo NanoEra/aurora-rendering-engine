@@ -170,6 +170,14 @@ private:
 	 * @return File content
 	 */
 	std::string read_file_(const std::string &path);
+
+	/*
+	 * @brief Process #include directives in shader source
+	 * @param source Shader source code
+	 * @param base_dir Base directory for relative includes
+	 * @return Processed source with includes resolved
+	 */
+	std::string process_includes_(const std::string &source, const std::string &base_dir);
 };
 
 } // namespace are

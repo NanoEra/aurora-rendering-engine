@@ -89,9 +89,18 @@ private:
 	uint height_;
 	RayTracerConfig config_;
 
+	// Scene data hash for change detection
+	uint materials_hash_;
+	uint lights_hash_;
+
 	// Texture arrays for PBR materials
 	GLuint texture_arrays_[6]; // albedo, normal, metallic, roughness, ao, emission
 	uint texture_array_sizes_[6]; // Number of textures in each array
+
+	// Texture array caching (content hash based)
+	uint texture_config_hash_; // Hash of entire texture configuration
+	uint texture_slot_hashes_[6]; // Hash per slot for incremental rebuild
+	bool texture_arrays_dirty_; // Dirty flag for texture arrays
 
 	std::shared_ptr<Shader> compute_shader_;
 	TextureHandle accumulation_texture_;
@@ -103,9 +112,6 @@ private:
 	Buffer bvh_node_buffer_;
 	Buffer bvh_triangle_buffer_;
 	bool bvh_built_;
-
-	uint materials_hash_;
-	uint lights_hash_;
 
 	uint frame_count_;
 	bool initialized_;

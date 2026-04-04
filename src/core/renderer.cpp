@@ -142,7 +142,9 @@ RenderStats Renderer::render(const Scene& scene, TextureHandle output_texture) {
 	TextureHandle final_output = rt_output;
 
 	if (config_.enable_denoising_ && denoiser_) {
-		final_output = denoiser_->denoise(rt_output, 1); // radius=1 => 3x3 mean
+		// Use temporal accumulation with weight 0.1 (10% blend of new frame)
+		float temporal_weight = 0.1f;
+		final_output = denoiser_->denoise(rt_output, 1, temporal_weight);
 	}
 
     // Phase 4: Blit to screen if output is default framebuffer
@@ -214,6 +216,11 @@ void Renderer::set_config(const RendererConfig &config) {
 void Renderer::notify_scene_changed(const Scene &scene) {
 	raytracer_->reset_accumulation();
 	raytracer_->rebuild_bvh(scene);
+
+	// Reset denoiser temporal history on scene change
+	if (denoiser_) {
+		denoiser_->reset_history();
+	}
 }
 
 } // namespace are

@@ -3,6 +3,18 @@
 #ifndef BVH_GLSL
 #define BVH_GLSL
 
+// Octahedral decode: 2D coordinates in [0, 1] range to unit vector
+vec3 oct_decode(vec2 f) {
+    f = f * 2.0 - 1.0;
+
+    vec3 n = vec3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+    float t = max(-n.z, 0.0);
+    n.x += n.x >= 0.0 ? -t : t;
+    n.y += n.y >= 0.0 ? -t : t;
+
+    return normalize(n);
+}
+
 // Ray-AABB intersection
 bool intersect_aabb(Ray ray, vec3 aabb_min, vec3 aabb_max, float t_max) {
     vec3 inv_d = 1.0 / ray.direction;
@@ -166,7 +178,11 @@ HitInfo trace_primary_gbuffer(Ray ray, ivec2 pixel_coords) {
     }
 
     vec3 p = pos.xyz;
-    vec3 n = normalize(imageLoad(g_normal, pixel_coords).xyz);
+    
+    // Decode octahedral normal from RG32F
+    vec2 oct_n = imageLoad(g_normal, pixel_coords).xy;
+    vec3 n = oct_decode(oct_n);
+    
     uint mid = imageLoad(g_material_id, pixel_coords).r;
     vec4 mat = imageLoad(g_material, pixel_coords);
     int mtype = int(mat.w);

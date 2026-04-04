@@ -135,7 +135,9 @@ void Mesh::compute_tangents() {
 		return;
 	}
 
-	std::fill(vertices_.begin(), vertices_.end(), Vertex {});
+	for (auto &v : vertices_) {
+		v.tangent_ = Vec3(0.0f);
+	}
 
 	for (size_t i = 0; i < indices_.size(); i += 3) {
 		uint i0 = indices_[i];

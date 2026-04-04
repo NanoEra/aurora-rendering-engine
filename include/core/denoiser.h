@@ -7,7 +7,7 @@
 
 namespace are {
 
-// Mean filter denoiser using compute shader
+// Bilateral filter denoiser with temporal accumulation
 class Denoiser {
 public:
 	/**
@@ -42,18 +42,26 @@ public:
 	void resize(uint width, uint height);
 
 	/**
-	 * @brief Apply mean filter
+	 * @brief Apply bilateral filter with optional temporal accumulation
 	 * @param input_texture RGBA32F input texture
 	 * @param radius Filter radius (1 => 3x3)
+	 * @param temporal_weight Weight for temporal blending (0 = no temporal, 1 = full history)
 	 * @return Output texture handle (internal)
 	 */
-	TextureHandle denoise(TextureHandle input_texture, int radius);
+	TextureHandle denoise(TextureHandle input_texture, int radius, float temporal_weight = 0.0f);
+
+	/**
+	 * @brief Reset temporal history (call on scene change)
+	 */
+	void reset_history();
 
 private:
 	uint width_;
 	uint height_;
 	std::shared_ptr<Shader> shader_;
 	TextureHandle output_texture_;
+	TextureHandle history_texture_;  // Previous frame for temporal accumulation
+	bool history_valid_;             // Whether history contains valid data
 	bool initialized_;
 
 	// Create output texture

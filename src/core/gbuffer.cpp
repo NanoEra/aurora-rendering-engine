@@ -42,7 +42,7 @@ bool GBuffer::initialize() {
 	tex_desc.format = TextureFormat::RGBA32F;
 	textures_[GBUFFER_POSITION] = rm.create_texture(tex_desc);
 
-	tex_desc.format = TextureFormat::RGBA32F;
+	tex_desc.format = TextureFormat::RG32F;  // Octahedral encoded normal
 	textures_[GBUFFER_NORMAL] = rm.create_texture(tex_desc);
 
 	tex_desc.format = TextureFormat::RGBA8;

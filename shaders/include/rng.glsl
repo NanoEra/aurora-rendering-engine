@@ -9,6 +9,19 @@ uint pcg_hash(uint seed) {
     return (word >> 22u) ^ word;
 }
 
+// Improved seed initialization with spatial-temporal decorrelation
+uint init_seed(ivec2 pixel_coords, ivec2 image_size, uint frame_count) {
+    uint pixel_index = uint(pixel_coords.x) + uint(pixel_coords.y) * uint(image_size.x);
+    
+    // Spatial hash to decorrelate neighboring pixels
+    uint spatial = pcg_hash(pixel_index);
+    
+    // Temporal hash with pixel-dependent multiplier to avoid frame correlation
+    uint temporal = frame_count * (spatial | 1u);  // OR with 1 to ensure non-zero multiplier
+    
+    return pcg_hash(spatial + temporal);
+}
+
 float random_float(inout uint seed) {
     seed = pcg_hash(seed);
     return float(seed) / 4294967296.0;

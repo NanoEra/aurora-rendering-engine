@@ -51,18 +51,19 @@ TYPE_EXTS["Other Code"]='go rs rb php swift kt scala'
 
 # Show usage
 show_usage() {
-	printf "Usage: %s [OPTIONS] [DIRECTORY]\n\n" "$(basename "$0")"
+	printf "Usage: %s [OPTIONS] [DIRECTORY...]\n\n" "$(basename "$0")"
 	printf "Options:\n"
 	printf "  -h, --help     Show this help message\n"
-	printf "  -d, --dir DIR  Specify directory to scan\n"
+	printf "  -d, --dir DIR  Specify directory to scan (can be used multiple times)\n"
 	printf "\nExamples:\n"
 	printf "  %s                    # Scan current directory\n" "$(basename "$0")"
 	printf "  %s /path/to/project   # Scan specified directory\n" "$(basename "$0")"
-	printf "  %s -d /path/to/project\n" "$(basename "$0")"
+	printf "  %s dir1 dir2 dir3     # Scan multiple directories\n" "$(basename "$0")"
+	printf "  %s -d dir1 -d dir2    # Scan multiple directories using -d option\n" "$(basename "$0")"
 }
 
 # Parse command line arguments
-scan_dir=""
+scan_dirs=()
 while [[ $# -gt 0 ]]; do
 	case "$1" in
 		-h|--help)
@@ -71,7 +72,7 @@ while [[ $# -gt 0 ]]; do
 			;;
 		-d|--dir)
 			if [[ -n "${2:-}" ]]; then
-				scan_dir="$2"
+				scan_dirs+=("$2")
 				shift 2
 			else
 				printf "Error: --dir requires a directory argument\n" >&2
@@ -84,42 +85,41 @@ while [[ $# -gt 0 ]]; do
 			exit 1
 			;;
 		*)
-			if [[ -z "$scan_dir" ]]; then
-				scan_dir="$1"
-			else
-				printf "Error: Multiple directories specified\n" >&2
-				exit 1
-			fi
+			scan_dirs+=("$1")
 			shift
 			;;
 	esac
 done
 
 # Default to current directory if not specified
-if [[ -z "$scan_dir" ]]; then
-	scan_dir="$(pwd)"
+if [[ ${#scan_dirs[@]} -eq 0 ]]; then
+	scan_dirs=("$(pwd)")
 fi
 
-# Validate directory
-if [[ ! -d "$scan_dir" ]]; then
-	printf "Error: Directory does not exist: %s\n" "$scan_dir" >&2
-	exit 1
-fi
+# Validate directories and convert to absolute paths
+target_dirs=()
+for scan_dir in "${scan_dirs[@]}"; do
+	if [[ ! -d "$scan_dir" ]]; then
+		printf "Error: Directory does not exist: %s\n" "$scan_dir" >&2
+		exit 1
+	fi
 
-# Convert to absolute path using readlink or realpath
-if command -v realpath >/dev/null 2>&1; then
-	target_dir="$(realpath "$scan_dir")"
-elif command -v readlink >/dev/null 2>&1 && readlink -f / >/dev/null 2>&1; then
-	target_dir="$(readlink -f "$scan_dir")"
-else
-	# Fallback: use cd + pwd
-	target_dir="$(cd "$scan_dir" && pwd)"
-fi
+	# Convert to absolute path using readlink or realpath
+	if command -v realpath >/dev/null 2>&1; then
+		target_dir="$(realpath "$scan_dir")"
+	elif command -v readlink >/dev/null 2>&1 && readlink -f / >/dev/null 2>&1; then
+		target_dir="$(readlink -f "$scan_dir")"
+	else
+		# Fallback: use cd + pwd
+		target_dir="$(cd "$scan_dir" && pwd)"
+	fi
 
-if [[ -z "$target_dir" || ! -d "$target_dir" ]]; then
-	printf "Error: Cannot resolve directory: %s\n" "$scan_dir" >&2
-	exit 1
-fi
+	if [[ -z "$target_dir" || ! -d "$target_dir" ]]; then
+		printf "Error: Cannot resolve directory: %s\n" "$scan_dir" >&2
+		exit 1
+	fi
+	target_dirs+=("$target_dir")
+done
 
 # Build suffix → type mapping (lowercase, without dot)
 declare -A SUFFIX_TYPE
@@ -144,7 +144,16 @@ printf "%b========================================%b\n" "${COLOR_MAP[White]}" "$
 printf "%b       Code Line Counter%b\n" "${COLOR_MAP[Yellow]}" "${COLOR_MAP[Reset]}"
 printf "%b========================================%b\n\n" "${COLOR_MAP[White]}" "${COLOR_MAP[Reset]}"
 
-printf "%bScanning directory: %s%b\n\n" "${COLOR_MAP[Gray]}" "$target_dir" "${COLOR_MAP[Reset]}"
+# Display directories to scan
+if [[ ${#target_dirs[@]} -eq 1 ]]; then
+	printf "%bScanning directory: %s%b\n\n" "${COLOR_MAP[Gray]}" "${target_dirs[0]}" "${COLOR_MAP[Reset]}"
+else
+	printf "%bScanning %d directories:%b\n" "${COLOR_MAP[Gray]}" "${#target_dirs[@]}" "${COLOR_MAP[Reset]}"
+	for dir in "${target_dirs[@]}"; do
+		printf "  • %s\n" "$dir"
+	done
+	printf "\n"
+fi
 
 # Statistics variables
 total_lines=0
@@ -171,35 +180,37 @@ ALL_FILES=()
 
 # Use find to get all files, then filter in bash
 # This is more reliable than multiple find calls with -iname
-while IFS= read -r -d '' file; do
-	# Skip empty
-	[[ -z "$file" ]] && continue
-	
-	# Get filename and extension
-	filename="${file##*/}"
-	
-	# Skip files without extension
-	[[ "$filename" != *.* ]] && continue
-	
-	# Get extension (lowercase, without dot)
-	ext="${filename##*.}"
-	ext_lower="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
-	
-	# Check if this extension is in our list
-	if [[ -n "${SUFFIX_TYPE[$ext_lower]+isset}" ]]; then
-		# Deduplicate
-		if [[ -z "${SEEN_FILES["$file"]+isset}" ]]; then
-			SEEN_FILES["$file"]=1
-			ALL_FILES+=("$file")
+for target_dir in "${target_dirs[@]}"; do
+	while IFS= read -r -d '' file; do
+		# Skip empty
+		[[ -z "$file" ]] && continue
+		
+		# Get filename and extension
+		filename="${file##*/}"
+		
+		# Skip files without extension
+		[[ "$filename" != *.* ]] && continue
+		
+		# Get extension (lowercase, without dot)
+		ext="${filename##*.}"
+		ext_lower="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+		
+		# Check if this extension is in our list
+		if [[ -n "${SUFFIX_TYPE[$ext_lower]+isset}" ]]; then
+			# Deduplicate
+			if [[ -z "${SEEN_FILES["$file"]+isset}" ]]; then
+				SEEN_FILES["$file"]=1
+				ALL_FILES+=("$file")
+			fi
 		fi
-	fi
-done < <(find "$target_dir" -type f -print0 2>/dev/null)
+	done < <(find "$target_dir" -type f -print0 2>/dev/null)
+done
 
 total_to_process=${#ALL_FILES[@]}
 
 if (( total_to_process == 0 )); then
 	printf "%bNo source code files found!%b\n" "${COLOR_MAP[Red]}" "${COLOR_MAP[Reset]}"
-	printf "%bPlease check if the directory contains source code files.%b\n" "${COLOR_MAP[Gray]}" "${COLOR_MAP[Reset]}"
+	printf "%bPlease check if the directories contain source code files.%b\n" "${COLOR_MAP[Gray]}" "${COLOR_MAP[Reset]}"
 	exit 0
 fi
 
@@ -343,7 +354,8 @@ printf "\n"
 read -r -p "Export statistics to CSV file? (Y/N) " exportChoice
 if [[ "$exportChoice" == "Y" || "$exportChoice" == "y" ]]; then
 	timestamp="$(date +%Y%m%d_%H%M%S)"
-	csv_path="${target_dir}/code_stats_${timestamp}.csv"
+	# Use the first directory as the export location
+	csv_path="${target_dirs[0]}/code_stats_${timestamp}.csv"
 
 	{
 		# CSV Header for file details

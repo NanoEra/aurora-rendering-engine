@@ -69,6 +69,14 @@ float fresnel_dielectric(float cos_theta, float ior) {
     return r0 + (1.0 - r0) * pow(1.0 - cos_theta, 5.0);
 }
 
+// GGX/Trowbridge-Reitz normal distribution function
+float distribution_ggx(float NdotH, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float d = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    return a2 / (PI * d * d);
+}
+
 // Scatter functions
 ScatterResult scatter_diffuse(Ray ray_in, HitInfo hit, Material mat, inout uint seed) {
     ScatterResult r;
@@ -86,14 +94,40 @@ ScatterResult scatter_diffuse(Ray ray_in, HitInfo hit, Material mat, inout uint 
 ScatterResult scatter_metal(Ray ray_in, HitInfo hit, Material mat, inout uint seed) {
     ScatterResult r;
 
-    vec3 reflected = reflect_vector(normalize(ray_in.direction), hit.normal);
-    vec3 fuzz = mat.roughness * random_in_unit_sphere(seed);
-    vec3 dir = reflected + fuzz;
+    vec3 V = normalize(-ray_in.direction);
+    vec3 N = hit.normal;
 
-    r.scattered = dot(dir, hit.normal) > 0.0;
-    r.attenuation = mat.albedo;
-    r.scattered_ray.origin = hit.position + hit.normal * EPSILON;
-    r.scattered_ray.direction = normalize(dir);
+    // Clamp roughness to avoid division by zero
+    float roughness = max(mat.roughness, 0.04);
+
+    // Sample microfacet normal using GGX importance sampling
+    vec3 H = sample_ggx_half_vector(roughness, N, seed);
+
+    // Reflect view direction around half vector
+    vec3 L = reflect(-V, H);
+
+    // Check if reflected direction is above surface
+    float NdotL = dot(N, L);
+    if (NdotL <= 0.0) {
+        r.scattered = false;
+        r.attenuation = vec3(0.0);
+        return r;
+    }
+
+	float NdotV = max(dot(N, V), 0.001);
+	float HdotV = max(dot(H, V), 0.001);
+
+	// Fresnel term (using albedo as F0 for metals)
+	vec3 F = fresnel_schlick(HdotV, mat.albedo);
+
+	// With proper GGX importance sampling of H, the BRDF contribution
+	// simplifies to just the Fresnel term.
+	// The D and geometry terms are canceled by the PDF.
+	r.attenuation = F;
+
+    r.scattered = true;
+    r.scattered_ray.origin = hit.position + N * EPSILON;
+    r.scattered_ray.direction = normalize(L);
     return r;
 }
 

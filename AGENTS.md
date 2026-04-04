@@ -1,7 +1,7 @@
 # AGENTS.md - Aurora Rendering Engine
 
 ## Project Overview
-Aurora Rendering Engine (ARE) is a high-performance path tracing library in C++ developed by NanoEra Studio. It provides a rendering framework using OpenGL 4.3 with support for GPU-accelerated ray tracing, BVH acceleration, and denoising.
+Aurora Rendering Engine (ARE) is a high-performance path tracing library in C++ developed by NanoEra Studio. It provides a rendering framework using OpenGL 4.3 with GPU-accelerated ray tracing, BVH acceleration, and denoising.
 
 ## Build Commands
 
@@ -19,16 +19,16 @@ cmake --build .
 ### Running Examples
 The main example is the Cornell Box demo:
 ```bash
-./examples/cornell_box
+./build/examples/cornell_box
 ```
 
 ### Testing
-This project currently has **no built-in unit tests**. Testing is performed manually by running the example executables. There are no test-specific build targets or test frameworks configured.
+This project has **no built-in unit tests**. Testing is performed manually by running the example executables. There are no test-specific build targets or test frameworks configured.
 
 ### Linting/Code Formatting
-- **Format**: Use `.clang-format` configuration in project root
+- **Format**: Use `.clang-format` configuration (tabs, attach braces, unlimited line length)
   ```bash
-  clang-format -i src/*.cpp include/**/*.h
+  clang-format -i src/*.cpp include/**/*.h examples/*.cpp
   ```
 - **Clangd**: IDE integration via `.clangd` file (C++20, includes paths configured)
 
@@ -36,21 +36,23 @@ This project currently has **no built-in unit tests**. Testing is performed manu
 
 ### General Conventions
 - **C++ Standard**: C++17 (project CMake), C++20 (clangd for IDE)
-- **Indentation**: Tabs (see `.clang-format`: `UseTab: Always`)
-- **Line Length**: Unlimited (`ColumnLimit: 0`)
-- **Brace Style**: Attach (see `.clang-format`: `BreakBeforeBraces: Attach`)
+- **Indentation**: Tabs (not spaces)
+- **Line Length**: Unlimited
+- **Brace Style**: Attach (opening brace on same line)
 
 ### File Organization
 - **Headers**: `include/` - Public API
 - **Source**: `src/` - Implementation
+- **Examples**: `examples/` - Demo applications
 - **Include format**: `#include "path/to/header.h"` (quotes for project headers)
 
 ### Naming Conventions
-- **Classes**: `PascalCase` (e.g., `Renderer`, `Scene`)
-- **Functions**: `PascalCase` (e.g., `initialize()`, `render()`)
+- **Classes**: `PascalCase` (e.g., `Renderer`, `Scene`, `RayTracer`)
+- **Functions**: `PascalCase` (e.g., `initialize()`, `render()`, `set_config()`)
 - **Member variables**: `snake_case_` with trailing underscore (e.g., `config_`, `frame_count_`)
 - **Types (aliases)**: `PascalCase` (e.g., `Vec3`, `Mat4`, `TextureHandle`)
-- **Enums**: `PascalCase` with `k` prefix for values (e.g., `LogLevel::ARE_LOG_INFO`)
+- **Enums**: `PascalCase` with `ARE_LOG_` prefix for values (e.g., `LogLevel::ARE_LOG_INFO`)
+- **Constants**: `SCREAMING_SNAKE_CASE` (e.g., `INVALID_HANDLE`)
 
 ### Header Guards
 ```cpp
@@ -71,7 +73,7 @@ This project currently has **no built-in unit tests**. Testing is performed manu
 4. Standard library headers
 
 ### Comments
-- Use Doxygen-style `/** */` or `/* */` for function documentation
+- Use `/* */` for function documentation with `@brief`, `@param`, `@return`
 - Brief descriptions in header files, implementation details in .cpp
 - Avoid unnecessary inline comments
 

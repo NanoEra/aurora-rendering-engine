@@ -16,21 +16,39 @@ namespace {
 		}
 		return h;
 	}
+
+	// Compute hash of texture pointers for a specific slot
+	uint compute_slot_texture_hash(const std::vector<std::shared_ptr<Texture>> &textures) {
+		if (textures.empty())
+			return 0u;
+		// Hash the raw pointers to detect texture set changes
+		std::vector<const void *> ptrs;
+		ptrs.reserve(textures.size());
+		for (const auto &t : textures) {
+			ptrs.push_back(t.get());
+		}
+		return fnv1a_hash_bytes(ptrs.data(), ptrs.size() * sizeof(void *));
+	}
 } // namespace
 
 RayTracer::RayTracer(uint width, uint height, const RayTracerConfig &config)
 	: width_(width)
 	, height_(height)
 	, config_(config)
+	, materials_hash_(0u)
+	, lights_hash_(0u)
+	, texture_config_hash_(0u)
+	, texture_arrays_dirty_(true)
 	, accumulation_texture_(INVALID_HANDLE)
 	, material_buffer_(INVALID_HANDLE)
 	, light_buffer_(INVALID_HANDLE)
 	, bvh_(nullptr)
 	, bvh_built_(false)
-	, materials_hash_(0u)
-	, lights_hash_(0u)
 	, frame_count_(0)
 	, initialized_(false) {
+	for (int i = 0; i < 6; ++i) {
+		texture_slot_hashes_[i] = 0u;
+	}
 }
 
 RayTracer::~RayTracer() {
@@ -394,7 +412,7 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 
 void RayTracer::bind_gbuffer_(const GBuffer &gbuffer) {
 	glBindImageTexture(0, gbuffer.get_texture(GBUFFER_POSITION), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-	glBindImageTexture(1, gbuffer.get_texture(GBUFFER_NORMAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+	glBindImageTexture(1, gbuffer.get_texture(GBUFFER_NORMAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RG32F);  // Octahedral encoded
 
 	glBindImageTexture(5, gbuffer.get_texture(GBUFFER_MATERIAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 	glBindImageTexture(6, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);
@@ -416,7 +434,7 @@ void RayTracer::build_texture_arrays_(const Scene &scene) {
 		for (int slot = 0; slot < 6; slot++) {
 			auto tex = mat->get_texture(static_cast<TextureSlot>(slot));
 			if (tex && tex->is_valid()) {
-				// Check if texture already added
+				// Check if texture already added (use set for O(1) lookup)
 				bool found = false;
 				for (const auto &t : textures[slot]) {
 					if (t.get() == tex.get()) {
@@ -431,10 +449,42 @@ void RayTracer::build_texture_arrays_(const Scene &scene) {
 		}
 	}
 
+	// Compute hash for each slot and check if rebuild is needed
+	bool any_slot_dirty = false;
+	uint new_slot_hashes[6];
+	for (int slot = 0; slot < 6; slot++) {
+		new_slot_hashes[slot] = compute_slot_texture_hash(textures[slot]);
+		if (new_slot_hashes[slot] != texture_slot_hashes_[slot]) {
+			any_slot_dirty = true;
+		}
+	}
+
+	// If no slots changed, skip entire rebuild
+	if (!any_slot_dirty && !texture_arrays_dirty_) {
+		// Still need to bind existing arrays
+		for (int slot = 0; slot < 6; slot++) {
+			if (texture_arrays_[slot] != 0) {
+				glActiveTexture(GL_TEXTURE10 + slot);
+				glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[slot]);
+			}
+		}
+		return;
+	}
+
 	ResourceManager &rm = ResourceManager::instance();
 
-	// Build arrays for each slot
+	// Build arrays only for dirty slots
 	for (int slot = 0; slot < 6; slot++) {
+		// Skip if this slot hasn't changed
+		if (new_slot_hashes[slot] == texture_slot_hashes_[slot] && !texture_arrays_dirty_) {
+			// Bind existing array
+			if (texture_arrays_[slot] != 0) {
+				glActiveTexture(GL_TEXTURE10 + slot);
+				glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[slot]);
+			}
+			continue;
+		}
+
 		// Destroy previous texture array if exists
 		if (texture_arrays_[slot] != 0) {
 			rm.destroy_texture_array(texture_arrays_[slot]);
@@ -443,6 +493,7 @@ void RayTracer::build_texture_arrays_(const Scene &scene) {
 
 		if (textures[slot].empty()) {
 			texture_array_sizes_[slot] = 0;
+			texture_slot_hashes_[slot] = 0u;
 			continue;
 		}
 
@@ -466,7 +517,18 @@ void RayTracer::build_texture_arrays_(const Scene &scene) {
 				}
 			}
 		}
+
+		// Update slot hash
+		texture_slot_hashes_[slot] = new_slot_hashes[slot];
+
+		// Bind the newly created array
+		if (texture_arrays_[slot] != 0) {
+			glActiveTexture(GL_TEXTURE10 + slot);
+			glBindTexture(GL_TEXTURE_2D_ARRAY, texture_arrays_[slot]);
+		}
 	}
+
+	texture_arrays_dirty_ = false;
 }
 
 } // namespace are

@@ -129,29 +129,57 @@ void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
 	const uint LEAF_SIZE = 4;
 
 	if (prim_count <= LEAF_SIZE) {
-		// Create leaf node
 		node.left_first_ = first_prim;
 		node.count_ = prim_count;
 		return;
 	}
 
-	// Find best split
-	int axis;
-	float split_pos;
+	// Calculate current depth
+	uint current_depth = 0;
+	uint idx = node_idx;
+	while (idx > 0) {
+		idx = (idx - 1) / 2;
+		current_depth++;
+	}
+	const uint MAX_DEPTH = 32;
+
+	// Force leaf if max depth reached
+	if (current_depth >= MAX_DEPTH) {
+		node.left_first_ = first_prim;
+		node.count_ = prim_count;
+		return;
+	}
+
+	// Find best split using SAH
+	int axis = 0;
+	float split_pos = 0.0f;
 	float split_cost = find_best_split_(first_prim, prim_count, axis, split_pos);
-	if (split_cost == std::numeric_limits<float>::max()) {
-		node.left_first_ = first_prim;
-		node.count_ = prim_count;
-		return;
-	}
 
-	// Check if split is beneficial
-	float no_split_cost = prim_count * bounds.surface_area();
-	if (split_cost >= no_split_cost) {
-		// Create leaf node
-		node.left_first_ = first_prim;
-		node.count_ = prim_count;
-		return;
+	// SAH cost comparison (normalized)
+	// C_split = C_trav + (N_left * SA_left + N_right * SA_right) / SA_parent
+	// C_leaf = N * C_int
+	// With C_trav = 1, C_int = 1:
+	// Split if C_split < C_leaf
+	// (Constants are used in find_best_split_ for cost calculation)
+
+	if (split_cost == std::numeric_limits<float>::max() || split_cost >= static_cast<float>(prim_count)) {
+		// SAH says no split is beneficial, but force split if too many prims
+		const uint MAX_PRIMS_PER_LEAF = 8;
+		if (prim_count <= MAX_PRIMS_PER_LEAF) {
+			node.left_first_ = first_prim;
+			node.count_ = prim_count;
+			return;
+		}
+		// Force median split as fallback
+		AABB cb = calculate_centroid_bounds_(first_prim, prim_count);
+		for (int a = 0; a < 3; ++a) {
+			float extent = cb.max_[a] - cb.min_[a];
+			if (extent > EPSILON) {
+				axis = a;
+				split_pos = (cb.min_[a] + cb.max_[a]) * 0.5f;
+				break;
+			}
+		}
 	}
 
 	// Partition primitives
@@ -192,6 +220,8 @@ float BVH::find_best_split_(uint first_prim, uint prim_count, int &axis, float &
 	axis = 0, split_pos = 0.0f;
 
 	AABB centroid_bounds = calculate_centroid_bounds_(first_prim, prim_count);
+	AABB parent_bounds = calculate_bounds_(first_prim, prim_count);
+	float parent_sa = parent_bounds.surface_area();
 
 	// Try each axis
 	for (int a = 0; a < 3; ++a) {
@@ -199,7 +229,7 @@ float BVH::find_best_split_(uint first_prim, uint prim_count, int &axis, float &
 		if (extent < EPSILON)
 			continue;
 
-		// Try multiple split positions
+		// Try multiple split positions using 16 bins
 		const int NUM_BINS = 16;
 		for (int i = 1; i < NUM_BINS; ++i) {
 			float t = static_cast<float>(i) / NUM_BINS;
@@ -222,11 +252,14 @@ float BVH::find_best_split_(uint first_prim, uint prim_count, int &axis, float &
 				}
 			}
 
-			// Calculate SAH cost
+			// Calculate normalized SAH cost
 			if (left_count == 0 || right_count == 0)
 				continue;
 
-			float cost = left_count * left_bounds.surface_area() + right_count * right_bounds.surface_area();
+			float cost = 1.0f; // Traversal cost
+			if (parent_sa > 0.0f) {
+				cost += (left_count * left_bounds.surface_area() + right_count * right_bounds.surface_area()) / parent_sa;
+			}
 
 			if (cost < best_cost) {
 				best_cost = cost;

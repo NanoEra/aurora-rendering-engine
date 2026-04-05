@@ -15,8 +15,8 @@ vec3 oct_decode(vec2 f) {
     return normalize(n);
 }
 
-// Ray-AABB intersection
-bool intersect_aabb(Ray ray, vec3 aabb_min, vec3 aabb_max, float t_max) {
+// Ray-AABB intersection: returns t_enter if hit, -1.0 if miss
+float intersect_aabb_t(Ray ray, vec3 aabb_min, vec3 aabb_max, float t_max) {
     vec3 inv_d = 1.0 / ray.direction;
     vec3 t0 = (aabb_min - ray.origin) * inv_d;
     vec3 t1 = (aabb_max - ray.origin) * inv_d;
@@ -27,7 +27,15 @@ bool intersect_aabb(Ray ray, vec3 aabb_min, vec3 aabb_max, float t_max) {
     float tmin = max(max(tmin3.x, tmin3.y), tmin3.z);
     float tmax2 = min(min(tmax3.x, tmax3.y), tmax3.z);
 
-    return (tmax2 >= max(tmin, 0.0)) && (tmin <= t_max);
+    if ((tmax2 >= max(tmin, 0.0)) && (tmin <= t_max)) {
+        return max(tmin, 0.0);
+    }
+    return -1.0;
+}
+
+// Ray-AABB intersection (boolean version for shadow rays)
+bool intersect_aabb(Ray ray, vec3 aabb_min, vec3 aabb_max, float t_max) {
+    return intersect_aabb_t(ray, aabb_min, aabb_max, t_max) >= 0.0;
 }
 
 // Moller-Trumbore triangle intersection
@@ -78,7 +86,7 @@ bool intersect_triangle(Ray ray, TriangleGpu tri, inout HitInfo hit) {
     return true;
 }
 
-// BVH traversal (closest hit)
+// BVH traversal (closest hit) with distance-sorted children
 HitInfo trace_ray_bvh(Ray ray) {
     HitInfo hit;
     hit.hit = false;
@@ -110,17 +118,42 @@ HitInfo trace_ray_bvh(Ray ray) {
                 intersect_triangle(ray, tri, hit);
             }
         } else {
+            // Distance-sorted child traversal: push farther child first
+            // so closer child is processed first, improving early termination
             uint left = left_first;
             uint right = left_first + 1u;
-            if (sp < 63) stack[sp++] = right;
-            if (sp < 63) stack[sp++] = left;
+
+            float t_left = intersect_aabb_t(ray,
+                bvh_nodes[left].aabb_min_left_first.xyz,
+                bvh_nodes[left].aabb_max_count.xyz, hit.t);
+            float t_right = intersect_aabb_t(ray,
+                bvh_nodes[right].aabb_min_left_first.xyz,
+                bvh_nodes[right].aabb_max_count.xyz, hit.t);
+
+            bool left_valid = t_left >= 0.0;
+            bool right_valid = t_right >= 0.0;
+
+            if (left_valid && right_valid) {
+                // Both valid: push farther first
+                if (t_left < t_right) {
+                    if (sp < 63) stack[sp++] = right;
+                    if (sp < 63) stack[sp++] = left;
+                } else {
+                    if (sp < 63) stack[sp++] = left;
+                    if (sp < 63) stack[sp++] = right;
+                }
+            } else if (left_valid) {
+                if (sp < 63) stack[sp++] = left;
+            } else if (right_valid) {
+                if (sp < 63) stack[sp++] = right;
+            }
         }
     }
 
     return hit;
 }
 
-// Any-hit BVH for shadow ray
+// Any-hit BVH for shadow ray (no sorting needed - early exit on first hit)
 bool trace_any_bvh(Ray ray, float t_max) {
     if (!u_use_bvh || u_bvh_node_count == 0u) return false;
 
@@ -142,7 +175,7 @@ bool trace_any_bvh(Ray ray, float t_max) {
         uint left_first = as_uint(node.aabb_min_left_first.w);
         uint count = as_uint(node.aabb_max_count.w);
 
-        if (!intersect_aabb(ray, bmin, bmax, hit.t)) continue;
+        if (!intersect_aabb(ray, bmin, bmax, t_max)) continue;
 
         if (count > 0u) {
             for (uint i = 0u; i < count; ++i) {

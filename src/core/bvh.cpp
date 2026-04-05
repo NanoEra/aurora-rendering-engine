@@ -46,12 +46,52 @@ BVH::~BVH() {
 	clear();
 }
 
+void BVH::clear() {
+	nodes_.clear();
+	triangles_.clear();
+	triangle_indices_.clear();
+}
+
 bool BVH::build(const std::vector<std::shared_ptr<Mesh>> &meshes) {
 	clear();
 
 	ARE_LOG_INFO("Building BVH...");
 
-	// Extract all triangles from meshes
+	// Step 1: Extract triangles from meshes
+	extract_triangles_(meshes);
+
+	if (triangles_.empty()) {
+		ARE_LOG_WARN("No triangles to build BVH");
+		return false;
+	}
+
+	// Step 2: Sort triangles by Morton code for spatial coherence
+	sort_triangles_by_morton_();
+
+	// Step 3: Initialize triangle indices (identity mapping after Morton sort)
+	uint n = static_cast<uint>(triangles_.size());
+	triangle_indices_.resize(n);
+	for (uint i = 0; i < n; ++i) {
+		triangle_indices_[i] = i;
+	}
+
+	// Step 4: Build BVH top-down using SAH
+	// Reserve space: worst case 2n-1 nodes for binary tree with 1 tri per leaf
+	nodes_.reserve(2 * n - 1);
+
+	// Create root node
+	nodes_.emplace_back();
+
+	// Build recursively
+	build_recursive_(0, 0, n);
+
+	ARE_LOG_INFO("BVH built: " + std::to_string(nodes_.size()) + " nodes, " +
+		std::to_string(triangles_.size()) + " triangles");
+
+	return true;
+}
+
+void BVH::extract_triangles_(const std::vector<std::shared_ptr<Mesh>> &meshes) {
 	for (const auto &mesh : meshes) {
 		const auto &vertices = mesh->get_vertices();
 		const auto &indices = mesh->get_indices();
@@ -61,7 +101,6 @@ bool BVH::build(const std::vector<std::shared_ptr<Mesh>> &meshes) {
 		for (size_t i = 0; i < indices.size(); i += 3) {
 			Triangle tri;
 
-			// Transform vertices
 			Vec4 v0 = transform * Vec4(vertices[indices[i]].position_, 1.0f);
 			Vec4 v1 = transform * Vec4(vertices[indices[i + 1]].position_, 1.0f);
 			Vec4 v2 = transform * Vec4(vertices[indices[i + 2]].position_, 1.0f);
@@ -70,18 +109,15 @@ bool BVH::build(const std::vector<std::shared_ptr<Mesh>> &meshes) {
 			tri.v1_ = Vec3(v1) / v1.w;
 			tri.v2_ = Vec3(v2) / v2.w;
 
-			// Transform normals
 			Mat3 normal_matrix = glm::transpose(glm::inverse(Mat3(transform)));
 			tri.n0_ = glm::normalize(normal_matrix * vertices[indices[i]].normal_);
 			tri.n1_ = glm::normalize(normal_matrix * vertices[indices[i + 1]].normal_);
 			tri.n2_ = glm::normalize(normal_matrix * vertices[indices[i + 2]].normal_);
 
-			// Transform tangents
 			tri.t0_ = glm::normalize(normal_matrix * vertices[indices[i]].tangent_);
 			tri.t1_ = glm::normalize(normal_matrix * vertices[indices[i + 1]].tangent_);
 			tri.t2_ = glm::normalize(normal_matrix * vertices[indices[i + 2]].tangent_);
 
-			// Copy UVs
 			tri.uv0_ = vertices[indices[i]].texcoord_;
 			tri.uv1_ = vertices[indices[i + 1]].texcoord_;
 			tri.uv2_ = vertices[indices[i + 2]].texcoord_;
@@ -91,30 +127,74 @@ bool BVH::build(const std::vector<std::shared_ptr<Mesh>> &meshes) {
 			triangles_.push_back(tri);
 		}
 	}
+}
 
-	if (triangles_.empty()) {
-		ARE_LOG_WARN("No triangles to build BVH");
-		return false;
+// Morton code helper: interleave bits
+static uint32_t part1by2(uint32_t x) {
+	x &= 0x000003ffu;
+	x = (x ^ (x << 16)) & 0xff0000ffu;
+	x = (x ^ (x << 8)) & 0x0300f00fu;
+	x = (x ^ (x << 4)) & 0x030c30c3u;
+	x = (x ^ (x << 2)) & 0x09249249u;
+	return x;
+}
+
+static uint32_t compute_morton_code(const Vec3 &p, const Vec3 &min, const Vec3 &max) {
+	Vec3 scale = Vec3(1023.0f) / (max - min + Vec3(1e-6f));
+	Vec3 v = (p - min) * scale;
+
+	uint32_t ix = glm::clamp(static_cast<int>(v.x), 0, 1023);
+	uint32_t iy = glm::clamp(static_cast<int>(v.y), 0, 1023);
+	uint32_t iz = glm::clamp(static_cast<int>(v.z), 0, 1023);
+
+	return (part1by2(iz) << 2) | (part1by2(iy) << 1) | part1by2(ix);
+}
+
+void BVH::sort_triangles_by_morton_() {
+	if (triangles_.empty())
+		return;
+
+	// Compute scene bounds
+	AABB scene_bounds;
+	for (const auto &tri : triangles_) {
+		scene_bounds.expand(tri.get_bounds());
 	}
 
-	// Initialize triangle indices
-	triangle_indices_.resize(triangles_.size());
+	// Expand bounds slightly
+	Vec3 padding = (scene_bounds.max_ - scene_bounds.min_) * 0.001f;
+	scene_bounds.min_ -= padding;
+	scene_bounds.max_ += padding;
+
+	// Compute Morton codes with indices
+	struct MortonEntry {
+		uint32_t code;
+		size_t original_index;
+	};
+
+	std::vector<MortonEntry> entries;
+	entries.reserve(triangles_.size());
+
 	for (size_t i = 0; i < triangles_.size(); ++i) {
-		triangle_indices_[i] = static_cast<uint>(i);
+		uint32_t code = compute_morton_code(triangles_[i].get_centroid(),
+			scene_bounds.min_, scene_bounds.max_);
+		entries.push_back({ code, i });
 	}
 
-	// Reserve space for nodes (estimate)
-	nodes_.reserve(triangles_.size() * 2);
+	// Sort by Morton code
+	std::sort(entries.begin(), entries.end(),
+		[](const MortonEntry &a, const MortonEntry &b) {
+			return a.code < b.code;
+		});
 
-	// Create root node
-	nodes_.emplace_back();
+	// Reorder triangles
+	std::vector<Triangle> sorted_triangles;
+	sorted_triangles.reserve(triangles_.size());
 
-	// Build BVH recursively
-	build_recursive_(0, 0, static_cast<uint>(triangles_.size()));
+	for (const auto &entry : entries) {
+		sorted_triangles.push_back(triangles_[entry.original_index]);
+	}
 
-	ARE_LOG_INFO("BVH built: " + std::to_string(nodes_.size()) + " nodes, " + std::to_string(triangles_.size()) + " triangles");
-
-	return true;
+	triangles_ = std::move(sorted_triangles);
 }
 
 void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
@@ -125,28 +205,10 @@ void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
 	node.aabb_min_ = bounds.min_;
 	node.aabb_max_ = bounds.max_;
 
-	// Leaf node threshold
-	const uint LEAF_SIZE = 4;
-
-	if (prim_count <= LEAF_SIZE) {
+	// Leaf node: 1 triangle per leaf for optimal GPU traversal
+	if (prim_count <= 1) {
 		node.left_first_ = first_prim;
-		node.count_ = prim_count;
-		return;
-	}
-
-	// Calculate current depth
-	uint current_depth = 0;
-	uint idx = node_idx;
-	while (idx > 0) {
-		idx = (idx - 1) / 2;
-		current_depth++;
-	}
-	const uint MAX_DEPTH = 32;
-
-	// Force leaf if max depth reached
-	if (current_depth >= MAX_DEPTH) {
-		node.left_first_ = first_prim;
-		node.count_ = prim_count;
+		node.count_ = 1;
 		return;
 	}
 
@@ -155,22 +217,9 @@ void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
 	float split_pos = 0.0f;
 	float split_cost = find_best_split_(first_prim, prim_count, axis, split_pos);
 
-	// SAH cost comparison (normalized)
-	// C_split = C_trav + (N_left * SA_left + N_right * SA_right) / SA_parent
-	// C_leaf = N * C_int
-	// With C_trav = 1, C_int = 1:
-	// Split if C_split < C_leaf
-	// (Constants are used in find_best_split_ for cost calculation)
-
+	// If SAH says no split is beneficial, force median split
+	// For GPU ray tracing, deeper trees with 1 tri per leaf are preferred
 	if (split_cost == std::numeric_limits<float>::max() || split_cost >= static_cast<float>(prim_count)) {
-		// SAH says no split is beneficial, but force split if too many prims
-		const uint MAX_PRIMS_PER_LEAF = 8;
-		if (prim_count <= MAX_PRIMS_PER_LEAF) {
-			node.left_first_ = first_prim;
-			node.count_ = prim_count;
-			return;
-		}
-		// Force median split as fallback
 		AABB cb = calculate_centroid_bounds_(first_prim, prim_count);
 		for (int a = 0; a < 3; ++a) {
 			float extent = cb.max_[a] - cb.min_[a];
@@ -194,7 +243,7 @@ void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
 		}
 	}
 
-	// Ensure we have primitives on both sides
+	// Ensure split produces non-empty partitions
 	if (mid == first_prim || mid == first_prim + prim_count) {
 		mid = first_prim + prim_count / 2;
 	}
@@ -203,10 +252,11 @@ void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
 	uint left_count = mid - first_prim;
 	uint right_count = prim_count - left_count;
 
+	// Store left child index (children will be at left_first_ and left_first_ + 1)
 	node.left_first_ = static_cast<uint>(nodes_.size());
-	node.count_ = 0;
+	node.count_ = 0; // Internal node
 
-	// Create child nodes
+	// Create child nodes (contiguous indices)
 	nodes_.emplace_back();
 	nodes_.emplace_back();
 
@@ -217,7 +267,8 @@ void BVH::build_recursive_(uint node_idx, uint first_prim, uint prim_count) {
 
 float BVH::find_best_split_(uint first_prim, uint prim_count, int &axis, float &split_pos) {
 	float best_cost = std::numeric_limits<float>::max();
-	axis = 0, split_pos = 0.0f;
+	axis = 0;
+	split_pos = 0.0f;
 
 	AABB centroid_bounds = calculate_centroid_bounds_(first_prim, prim_count);
 	AABB parent_bounds = calculate_bounds_(first_prim, prim_count);
@@ -229,13 +280,12 @@ float BVH::find_best_split_(uint first_prim, uint prim_count, int &axis, float &
 		if (extent < EPSILON)
 			continue;
 
-		// Try multiple split positions using 16 bins
+		// 16-bin SAH
 		const int NUM_BINS = 16;
 		for (int i = 1; i < NUM_BINS; ++i) {
 			float t = static_cast<float>(i) / NUM_BINS;
 			float pos = centroid_bounds.min_[a] + t * extent;
 
-			// Count primitives and calculate bounds for each side
 			AABB left_bounds, right_bounds;
 			uint left_count = 0, right_count = 0;
 
@@ -252,13 +302,14 @@ float BVH::find_best_split_(uint first_prim, uint prim_count, int &axis, float &
 				}
 			}
 
-			// Calculate normalized SAH cost
 			if (left_count == 0 || right_count == 0)
 				continue;
 
-			float cost = 1.0f; // Traversal cost
+			// SAH cost: C_split = C_trav + (N_left * SA_left + N_right * SA_right) / SA_parent
+			float cost = 1.0f;
 			if (parent_sa > 0.0f) {
-				cost += (left_count * left_bounds.surface_area() + right_count * right_bounds.surface_area()) / parent_sa;
+				cost += (left_count * left_bounds.surface_area() +
+					right_count * right_bounds.surface_area()) / parent_sa;
 			}
 
 			if (cost < best_cost) {
@@ -338,7 +389,6 @@ bool BVH::upload_to_gpu(Buffer &node_buffer, Buffer &triangle_buffer) {
 		g.uv0_uv1_ = Vec4(t.uv0_.x, t.uv0_.y, t.uv1_.x, t.uv1_.y);
 		g.uv2_ = Vec4(t.uv2_.x, t.uv2_.y, 0.0f, 0.0f);
 
-		// Pack tangents
 		g.t0_ = Vec4(t.t0_, 0.0f);
 		g.t1_ = Vec4(t.t1_, 0.0f);
 
@@ -363,12 +413,6 @@ bool BVH::upload_to_gpu(Buffer &node_buffer, Buffer &triangle_buffer) {
 
 	ARE_LOG_INFO("BVH uploaded to GPU successfully");
 	return true;
-}
-
-void BVH::clear() {
-	nodes_.clear();
-	triangles_.clear();
-	triangle_indices_.clear();
 }
 
 } // namespace are

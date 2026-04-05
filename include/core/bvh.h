@@ -53,17 +53,19 @@ struct Triangle {
 };
 
 // BVH node for GPU
+// Internal node: left_first_ = left child index, count_ = 0 (right child = left_first_ + 1)
+// Leaf node: left_first_ = triangle offset in sorted array, count_ = triangle count
 struct BVHNode {
 	Vec3 aabb_min_;
-	uint left_first_; // Left child index or first primitive index
+	uint left_first_; // Left child index (internal) or first primitive index (leaf)
 	Vec3 aabb_max_;
-	uint count_; // 0 for interior node, >0 for leaf node
+	uint count_; // 0 for internal node, >0 for leaf (triangle count)
 };
 
 // GPU-friendly BVH node layout (std430 aligned)
 struct BVHNodeGpu {
 	Vec4 aabb_min_left_first_; ///< xyz = aabb min, w = left_first (uint)
-	Vec4 aabb_max_count_; ///< xyz = aabb max, w = count (uint, 0 for interior)
+	Vec4 aabb_max_count_; ///< xyz = aabb max, w = count (uint, 0 for internal)
 };
 
 // GPU-friendly triangle layout (std430 aligned)
@@ -80,7 +82,22 @@ struct TriangleGpu {
 	Vec4 t1_; ///< xyz = t1 (tangent at v1), w = reserved
 };
 
-// Bounding Volume Hierarchy for ray tracing acceleration
+/*
+ * @brief Bounding Volume Hierarchy using top-down SAH construction
+ *
+ * Algorithm:
+ * 1. Extract triangles from meshes and transform to world space
+ * 2. Sort triangles by Morton code for spatial coherence
+ * 3. Build BVH top-down using SAH (Surface Area Heuristic) with 16-bin evaluation
+ * 4. Node layout ensures children are at consecutive indices for GPU efficiency
+ *
+ * Node layout (GPU-friendly):
+ * - Internal nodes: left_first_ = left child index, right = left_first_ + 1
+ * - Leaf nodes: left_first_ = triangle offset, count_ = triangle count
+ *
+ * Time complexity: O(n log n) average with SAH binning
+ * Space complexity: O(n)
+ */
 class BVH {
 public:
 	// Constructor
@@ -126,39 +143,43 @@ public:
 private:
 	std::vector<BVHNode> nodes_;
 	std::vector<Triangle> triangles_;
-	std::vector<uint> triangle_indices_;
+	std::vector<uint> triangle_indices_; // Indirection array for partitioning
 
 	/*
-	 * @brief Recursively build BVH
-	 * @param node_idx Current node index
-	 * @param first_prim First primitive index
-	 * @param prim_count Primitive count
+	 * @brief Extract triangles from meshes and transform to world space
+	 */
+	void extract_triangles_(const std::vector<std::shared_ptr<Mesh>> &meshes);
+
+	/*
+	 * @brief Sort triangles by Morton code for spatial coherence
+	 */
+	void sort_triangles_by_morton_();
+
+	/*
+	 * @brief Recursively build BVH using SAH
+	 * @param node_idx Current node index to fill
+	 * @param first_prim First primitive index in triangle_indices_
+	 * @param prim_count Number of primitives
 	 */
 	void build_recursive_(uint node_idx, uint first_prim, uint prim_count);
 
 	/*
-	 * @brief Find best split using SAH
+	 * @brief Find best split using SAH with binning
 	 * @param first_prim First primitive index
 	 * @param prim_count Primitive count
-	 * @param axis Split axis (output)
-	 * @param split_pos Split position (output)
-	 * @return Split cost
+	 * @param axis Best split axis (output)
+	 * @param split_pos Best split position (output)
+	 * @return SAH cost of best split
 	 */
 	float find_best_split_(uint first_prim, uint prim_count, int &axis, float &split_pos);
 
 	/*
 	 * @brief Calculate node bounds
-	 * @param first_prim First primitive index
-	 * @param prim_count Primitive count
-	 * @return Bounding box
 	 */
 	AABB calculate_bounds_(uint first_prim, uint prim_count);
 
 	/*
 	 * @brief Calculate centroid bounds
-	 * @param first_prim First primitive index
-	 * @param prim_count Primitive count
-	 * @return Centroid bounding box
 	 */
 	AABB calculate_centroid_bounds_(uint first_prim, uint prim_count);
 };

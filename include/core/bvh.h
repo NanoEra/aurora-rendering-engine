@@ -68,18 +68,23 @@ struct BVHNodeGpu {
 	Vec4 aabb_max_count_; ///< xyz = aabb max, w = count (uint, 0 for internal)
 };
 
-// GPU-friendly triangle layout (std430 aligned)
-struct TriangleGpu {
-	Vec4 v0_material_; ///< xyz = v0, w = material_id (uint)
-	Vec4 v1_; ///< xyz = v1, w = reserved
-	Vec4 v2_; ///< xyz = v2, w = reserved
-	Vec4 n0_; ///< xyz = n0, w = reserved
-	Vec4 n1_; ///< xyz = n1, w = reserved
-	Vec4 n2_; ///< xyz = n2, w = reserved
+// Compact triangle for intersection testing only (48 bytes = 3 x vec4)
+// Precomputes edge vectors to avoid redundant calculation in Moller-Trumbore
+struct TriangleCompactGpu {
+	Vec4 v0_material_; ///< xyz = v0 position, w = material_id (uint)
+	Vec4 e1_; ///< xyz = v1 - v0 (precomputed edge 1)
+	Vec4 e2_; ///< xyz = v2 - v0 (precomputed edge 2)
+};
+
+// Full triangle attributes fetched only after confirmed hit (112 bytes = 7 x vec4)
+struct TriangleAttrGpu {
+	Vec4 n0_; ///< xyz = normal at v0
+	Vec4 n1_; ///< xyz = normal at v1
+	Vec4 n2_; ///< xyz = normal at v2
 	Vec4 uv0_uv1_; ///< xy = uv0, zw = uv1
-	Vec4 uv2_; ///< xy = uv2, zw = reserved
-	Vec4 t0_; ///< xyz = t0 (tangent at v0), w = reserved
-	Vec4 t1_; ///< xyz = t1 (tangent at v1), w = reserved
+	Vec4 uv2_; ///< xy = uv2
+	Vec4 t0_; ///< xyz = tangent at v0
+	Vec4 t1_; ///< xyz = tangent at v1
 };
 
 /*
@@ -116,10 +121,11 @@ public:
 	/*
 	 * @brief Upload BVH to GPU
 	 * @param node_buffer Buffer for BVH nodes
-	 * @param triangle_buffer Buffer for triangles
+	 * @param triangle_buffer Buffer for compact triangles (intersection only)
+	 * @param attr_buffer Buffer for triangle attributes (fetched on hit)
 	 * @return True if upload succeeded
 	 */
-	bool upload_to_gpu(Buffer &node_buffer, Buffer &triangle_buffer);
+	bool upload_to_gpu(Buffer &node_buffer, Buffer &triangle_buffer, Buffer &attr_buffer);
 
 	/*
 	 * @brief Get total node count

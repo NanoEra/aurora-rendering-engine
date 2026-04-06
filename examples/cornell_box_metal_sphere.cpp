@@ -299,7 +299,7 @@ void setup_cornell_box() {
 	g_scene->add_mesh(tall_box);
 
 	// Metal sphere (replacing the glass box, positioned on the right side)
-	auto metal_sphere = create_sphere(0.5f, 16, 8, /*metal_id*/white_id);
+	auto metal_sphere = create_sphere(0.5f, 64, 32, /*metal_id*/white_id);
 	metal_sphere->set_position(Vec3(0.55f, -1.5f, 0.35f));
 	metal_sphere->upload_to_gpu();
 	g_scene->add_mesh(metal_sphere);

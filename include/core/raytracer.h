@@ -110,7 +110,8 @@ private:
 	// BVH related
 	std::unique_ptr<BVH> bvh_;
 	Buffer bvh_node_buffer_;
-	Buffer bvh_triangle_buffer_;
+	Buffer bvh_triangle_buffer_; ///< Compact triangle data (intersection only)
+	Buffer bvh_attr_buffer_; ///< Triangle attributes (fetched on hit)
 	bool bvh_built_;
 
 	uint frame_count_;

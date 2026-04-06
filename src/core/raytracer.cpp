@@ -124,6 +124,7 @@ void RayTracer::release() {
 
 	bvh_node_buffer_.release();
 	bvh_triangle_buffer_.release();
+	bvh_attr_buffer_.release();
 
 	bvh_.reset();
 	bvh_built_ = false;
@@ -149,7 +150,7 @@ bool RayTracer::rebuild_bvh(const Scene &scene) {
 		return false;
 	}
 
-	if (!bvh_->upload_to_gpu(bvh_node_buffer_, bvh_triangle_buffer_)) {
+	if (!bvh_->upload_to_gpu(bvh_node_buffer_, bvh_triangle_buffer_, bvh_attr_buffer_)) {
 		ARE_LOG_ERROR("Failed to upload BVH to GPU");
 		return false;
 	}
@@ -224,6 +225,7 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 	if (config_.use_bvh_ && bvh_built_) {
 		bvh_node_buffer_.bind_base(2);
 		bvh_triangle_buffer_.bind_base(3);
+		bvh_attr_buffer_.bind_base(4);
 		compute_shader_->set_bool("u_use_bvh", true);
 		compute_shader_->set_uint("u_bvh_node_count", bvh_->get_node_count());
 	} else {
@@ -412,7 +414,7 @@ void RayTracer::upload_scene_data_(const Scene &scene) {
 
 void RayTracer::bind_gbuffer_(const GBuffer &gbuffer) {
 	glBindImageTexture(0, gbuffer.get_texture(GBUFFER_POSITION), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
-	glBindImageTexture(1, gbuffer.get_texture(GBUFFER_NORMAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RG32F);  // Octahedral encoded
+	glBindImageTexture(1, gbuffer.get_texture(GBUFFER_NORMAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RG32F); // Octahedral encoded
 
 	glBindImageTexture(5, gbuffer.get_texture(GBUFFER_MATERIAL), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 	glBindImageTexture(6, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);

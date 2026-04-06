@@ -85,8 +85,7 @@ bool BVH::build(const std::vector<std::shared_ptr<Mesh>> &meshes) {
 	// Build recursively
 	build_recursive_(0, 0, n);
 
-	ARE_LOG_INFO("BVH built: " + std::to_string(nodes_.size()) + " nodes, " +
-		std::to_string(triangles_.size()) + " triangles");
+	ARE_LOG_INFO("BVH built: " + std::to_string(nodes_.size()) + " nodes, " + std::to_string(triangles_.size()) + " triangles");
 
 	return true;
 }
@@ -308,8 +307,7 @@ float BVH::find_best_split_(uint first_prim, uint prim_count, int &axis, float &
 			// SAH cost: C_split = C_trav + (N_left * SA_left + N_right * SA_right) / SA_parent
 			float cost = 1.0f;
 			if (parent_sa > 0.0f) {
-				cost += (left_count * left_bounds.surface_area() +
-					right_count * right_bounds.surface_area()) / parent_sa;
+				cost += (left_count * left_bounds.surface_area() + right_count * right_bounds.surface_area()) / parent_sa;
 			}
 
 			if (cost < best_cost) {
@@ -347,7 +345,7 @@ AABB BVH::calculate_centroid_bounds_(uint first_prim, uint prim_count) {
 	return bounds;
 }
 
-bool BVH::upload_to_gpu(Buffer &node_buffer, Buffer &triangle_buffer) {
+bool BVH::upload_to_gpu(Buffer &node_buffer, Buffer &triangle_buffer, Buffer &attr_buffer) {
 	if (nodes_.empty() || triangles_.empty()) {
 		ARE_LOG_ERROR("Cannot upload empty BVH to GPU");
 		return false;
@@ -371,28 +369,36 @@ bool BVH::upload_to_gpu(Buffer &node_buffer, Buffer &triangle_buffer) {
 		node_gpu[i] = g;
 	}
 
-	// Pack triangles to GPU layout
-	std::vector<TriangleGpu> tri_gpu;
-	tri_gpu.resize(ordered_triangles.size());
+	// Pack compact triangles (intersection only, 48 bytes each)
+	std::vector<TriangleCompactGpu> tri_compact;
+	tri_compact.resize(ordered_triangles.size());
 	for (size_t i = 0; i < ordered_triangles.size(); ++i) {
 		const Triangle &t = ordered_triangles[i];
 
-		TriangleGpu g {};
+		TriangleCompactGpu g {};
 		g.v0_material_ = Vec4(t.v0_, glm::uintBitsToFloat(t.material_id_));
-		g.v1_ = Vec4(t.v1_, 0.0f);
-		g.v2_ = Vec4(t.v2_, 0.0f);
+		g.e1_ = Vec4(t.v1_ - t.v0_, 0.0f);
+		g.e2_ = Vec4(t.v2_ - t.v0_, 0.0f);
 
+		tri_compact[i] = g;
+	}
+
+	// Pack triangle attributes (fetched only on hit, 112 bytes each)
+	std::vector<TriangleAttrGpu> tri_attr;
+	tri_attr.resize(ordered_triangles.size());
+	for (size_t i = 0; i < ordered_triangles.size(); ++i) {
+		const Triangle &t = ordered_triangles[i];
+
+		TriangleAttrGpu g {};
 		g.n0_ = Vec4(t.n0_, 0.0f);
 		g.n1_ = Vec4(t.n1_, 0.0f);
 		g.n2_ = Vec4(t.n2_, 0.0f);
-
 		g.uv0_uv1_ = Vec4(t.uv0_.x, t.uv0_.y, t.uv1_.x, t.uv1_.y);
 		g.uv2_ = Vec4(t.uv2_.x, t.uv2_.y, 0.0f, 0.0f);
-
 		g.t0_ = Vec4(t.t0_, 0.0f);
 		g.t1_ = Vec4(t.t1_, 0.0f);
 
-		tri_gpu[i] = g;
+		tri_attr[i] = g;
 	}
 
 	if (!node_buffer.create(BufferType::SHADER_STORAGE_BUFFER,
@@ -404,14 +410,22 @@ bool BVH::upload_to_gpu(Buffer &node_buffer, Buffer &triangle_buffer) {
 	}
 
 	if (!triangle_buffer.create(BufferType::SHADER_STORAGE_BUFFER,
-			tri_gpu.size() * sizeof(TriangleGpu),
-			tri_gpu.data(),
+			tri_compact.size() * sizeof(TriangleCompactGpu),
+			tri_compact.data(),
 			BufferUsage::STATIC_DRAW)) {
-		ARE_LOG_ERROR("Failed to upload BVH triangles to GPU");
+		ARE_LOG_ERROR("Failed to upload BVH compact triangles to GPU");
 		return false;
 	}
 
-	ARE_LOG_INFO("BVH uploaded to GPU successfully");
+	if (!attr_buffer.create(BufferType::SHADER_STORAGE_BUFFER,
+			tri_attr.size() * sizeof(TriangleAttrGpu),
+			tri_attr.data(),
+			BufferUsage::STATIC_DRAW)) {
+		ARE_LOG_ERROR("Failed to upload BVH triangle attributes to GPU");
+		return false;
+	}
+
+	ARE_LOG_INFO("BVH uploaded to GPU: " + std::to_string(nodes_.size()) + " nodes, " + std::to_string(ordered_triangles.size()) + " triangles (" + std::to_string(tri_compact.size() * sizeof(TriangleCompactGpu) / 1024) + "KB compact + " + std::to_string(tri_attr.size() * sizeof(TriangleAttrGpu) / 1024) + "KB attr)");
 	return true;
 }
 

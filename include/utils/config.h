@@ -6,14 +6,25 @@
 
 namespace are {
 
+// Ray tracing configuration
+struct RayTracerConfig {
+	uint samples_per_pixel = 1;
+	uint max_depth = 4;
+	bool enable_shadows = true;
+	bool enable_reflections = true;
+	bool enable_accumulation = true;
+	bool use_bvh = true;
+};
+
+
 // Configuration struct for renderer
 struct RendererConfig {
-	uint width_;
-	uint height_;
-	uint samples_per_pixel_;
-	uint max_ray_depth_;
-	bool enable_denoising_;
-	bool enable_accumulation_;
+	uint output_width;
+	uint output_height;
+	RayTracerConfig rt_config;
+	bool enable_denoising;
+	bool enable_sr; // Enable the super resolution mode
+	double sr_scaling; // The magnification of super-resolution
 };
 
 } // namespace are

@@ -7,20 +7,11 @@
 #include "resource/buffer.h"
 #include "resource/shader.h"
 #include "scene/scene.h"
+#include "utils/config.h"
 #include <glad/glad.h>
 #include <memory>
 
 namespace are {
-
-// Ray tracing configuration
-struct RayTracerConfig {
-	uint samples_per_pixel_;
-	uint max_depth_;
-	bool enable_shadows_;
-	bool enable_reflections_;
-	bool enable_accumulation_;
-	bool use_bvh_;
-};
 
 // Compute shader based ray tracer
 class RayTracer {

@@ -299,7 +299,7 @@ void setup_cornell_box() {
 	g_scene->add_mesh(tall_box);
 
 	// Metal sphere (replacing the glass box, positioned on the right side)
-	auto metal_sphere = create_sphere(0.5f, 64, 32, /*metal_id*/white_id);
+	auto metal_sphere = create_sphere(0.5f, 32, 16, /*metal_id*/white_id);
 	metal_sphere->set_position(Vec3(0.55f, -1.5f, 0.35f));
 	metal_sphere->upload_to_gpu();
 	g_scene->add_mesh(metal_sphere);
@@ -529,12 +529,12 @@ int main() {
 
 	ARE_LOG_INFO("Initializing renderer...");
 	RendererConfig config;
-	config.width_ = WINDOW_WIDTH;
-	config.height_ = WINDOW_HEIGHT;
-	config.samples_per_pixel_ = 1;
-	config.max_ray_depth_ = 4;
-	config.enable_accumulation_ = true;
-	config.enable_denoising_ = false;
+	config.output_width = WINDOW_WIDTH;
+	config.output_height = WINDOW_HEIGHT;
+	config.rt_config.samples_per_pixel = 1;
+	config.rt_config.max_depth = 4;
+	config.rt_config.enable_accumulation = true;
+	config.enable_denoising = false;
 
 	g_renderer = std::make_unique<Renderer>(config);
 	if (!g_renderer->initialize()) {

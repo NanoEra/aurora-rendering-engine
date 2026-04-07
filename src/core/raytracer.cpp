@@ -84,7 +84,7 @@ bool RayTracer::initialize(const std::shared_ptr<Shader> &shader) {
 	}
 
 	// Initialize BVH if enabled
-	if (config_.use_bvh_) {
+	if (config_.use_bvh) {
 		bvh_ = std::make_unique<BVH>();
 	}
 
@@ -134,7 +134,7 @@ void RayTracer::release() {
 }
 
 bool RayTracer::rebuild_bvh(const Scene &scene) {
-	if (!config_.use_bvh_) {
+	if (!config_.use_bvh) {
 		ARE_LOG_WARN("BVH is disabled in configuration");
 		return false;
 	}
@@ -173,7 +173,7 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 	}
 
 	// Build BVH if enabled and not built yet
-	if (config_.use_bvh_ && !bvh_built_) {
+	if (config_.use_bvh && !bvh_built_) {
 		rebuild_bvh(scene);
 	}
 
@@ -222,7 +222,7 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 	glBindImageTexture(4, accumulation_texture_, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA32F);
 
 	// Bind BVH buffers if enabled
-	if (config_.use_bvh_ && bvh_built_) {
+	if (config_.use_bvh && bvh_built_) {
 		bvh_node_buffer_.bind_base(2);
 		bvh_triangle_buffer_.bind_base(3);
 		bvh_attr_buffer_.bind_base(4);
@@ -234,10 +234,10 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 
 	// Set uniforms
 	compute_shader_->set_uint("u_frame_count", frame_count_);
-	compute_shader_->set_uint("u_samples_per_pixel", config_.samples_per_pixel_);
-	compute_shader_->set_uint("u_max_depth", config_.max_depth_);
+	compute_shader_->set_uint("u_samples_per_pixel", config_.samples_per_pixel);
+	compute_shader_->set_uint("u_max_depth", config_.max_depth);
 	compute_shader_->set_uint("u_light_count", static_cast<uint>(scene.get_lights().size()));
-	compute_shader_->set_bool("u_enable_accumulation", config_.enable_accumulation_);
+	compute_shader_->set_bool("u_enable_accumulation", config_.enable_accumulation);
 
 	// Enable/disable textures based on material usage
 	compute_shader_->set_bool("u_enable_textures", has_textures);
@@ -257,7 +257,7 @@ void RayTracer::trace(const Scene &scene, const GBuffer &gbuffer, TextureHandle 
 	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 	// Increment frame count for accumulation
-	if (config_.enable_accumulation_) {
+	if (config_.enable_accumulation) {
 		frame_count_++;
 	}
 }
@@ -288,16 +288,16 @@ void RayTracer::reset_accumulation() {
 }
 
 void RayTracer::set_config(const RayTracerConfig &config) {
-	bool bvh_changed = (config.use_bvh_ != config_.use_bvh_);
+	bool bvh_changed = (config.use_bvh != config_.use_bvh);
 
 	config_ = config;
 	reset_accumulation();
 
 	if (bvh_changed) {
-		if (config_.use_bvh_ && !bvh_) {
+		if (config_.use_bvh && !bvh_) {
 			bvh_ = std::make_unique<BVH>();
 			bvh_built_ = false;
-		} else if (!config_.use_bvh_) {
+		} else if (!config_.use_bvh) {
 			bvh_.reset();
 			bvh_built_ = false;
 		}

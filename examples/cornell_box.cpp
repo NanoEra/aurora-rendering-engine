@@ -547,12 +547,12 @@ int main() {
 
 	ARE_LOG_INFO("Initializing renderer...");
 	RendererConfig config;
-	config.width_ = WINDOW_WIDTH;
-	config.height_ = WINDOW_HEIGHT;
-	config.samples_per_pixel_ = 1;
-	config.max_ray_depth_ = 4;
-	config.enable_accumulation_ = true;
-	config.enable_denoising_ = false;
+	config.output_width = WINDOW_WIDTH;
+	config.output_height = WINDOW_HEIGHT;
+	config.rt_config.samples_per_pixel = 1;
+	config.rt_config.max_depth = 4;
+	config.rt_config.enable_accumulation = true;
+	config.enable_denoising = false;
 
 	g_renderer = std::make_unique<Renderer>(config);
 	if (!g_renderer->initialize()) {

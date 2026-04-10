@@ -1,4 +1,3 @@
-
 # =========================================
 # Basic Configuration
 # =========================================
@@ -6,6 +5,9 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(are LANGUAGES C CXX)
+
+# Policy for FetchContent compatibility with older dependencies
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -31,12 +33,7 @@ message(STATUS "Compiler:        ${CMAKE_CXX_COMPILER}")
 message(STATUS "================================")
 message(STATUS "")
 
-# Set compiler flags based on build type
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_options(-O3 -Wall -Wextra)
-elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_options(-Og -Wall -g)
-endif()
+# Set compiler flags after target is defined to avoid affecting subprojects
 
 # =========================================
 # Dependencies
@@ -44,7 +41,6 @@ endif()
 
 # Find required packages
 find_package(OpenGL REQUIRED)
-find_package(glfw3 REQUIRED)
 find_package(Threads REQUIRED)
 
 # =========================================
@@ -97,6 +93,50 @@ target_include_directories(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
     PUBLIC
         OpenGL::GL
-        glfw
         Threads::Threads
 )
+
+# Set compiler flags based on build type and compiler (target-specific)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        target_compile_options(${PROJECT_NAME} PRIVATE -O3 -Wall -Wextra)
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        target_compile_options(${PROJECT_NAME} PRIVATE -Og -Wall -g)
+    endif()
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /utf-8)
+    target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/O2>)
+    target_compile_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Debug>:/Od>)
+endif()
+
+# =========================================
+# GLFW - Auto-download if not in lib/
+# =========================================
+
+set(GLFW_LIB_DIR "${CMAKE_SOURCE_DIR}/lib/glfw")
+set(ARE_USE_SYSTEM_GLFW FALSE)
+
+# Check if GLFW is in lib/ or system - prefer system first for better compatibility
+if(EXISTS "${GLFW_LIB_DIR}")
+    message(STATUS "Using GLFW from lib/")
+    add_subdirectory(${GLFW_LIB_DIR} glfw_system)
+    target_link_libraries(${PROJECT_NAME} PUBLIC glfw)
+else()
+    find_package(glfw3 QUIET)
+    if(glfw3_FOUND)
+        message(STATUS "Using system GLFW")
+        target_link_libraries(${PROJECT_NAME} PUBLIC glfw)
+        set(ARE_USE_SYSTEM_GLFW TRUE)
+    else()
+        include(FetchContent)
+        message(STATUS "Downloading GLFW...")
+        FetchContent_Declare(
+            glfw
+            GIT_REPOSITORY https://github.com/glfw/glfw.git
+            GIT_TAG 3.4
+            GIT_SHALLOW TRUE
+        )
+        FetchContent_MakeAvailable(glfw)
+        target_link_libraries(${PROJECT_NAME} PUBLIC glfw)
+    endif()
+endif()

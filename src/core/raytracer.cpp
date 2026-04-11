@@ -420,10 +420,10 @@ void RayTracer::bind_gbuffer_(const GBuffer &gbuffer) {
 	glBindImageTexture(6, gbuffer.get_texture(GBUFFER_MATERIAL_ID), 0, GL_FALSE, 0, GL_READ_ONLY, GL_R32UI);
 
 	// Texcoord
-	glBindImageTexture(7, gbuffer.get_texture(GBUFFER_TEXCOORD), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+	glBindImageTexture(2, gbuffer.get_texture(GBUFFER_TEXCOORD), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 
 	// Tangent
-	glBindImageTexture(8, gbuffer.get_texture(GBUFFER_TANGENT), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+	glBindImageTexture(7, gbuffer.get_texture(GBUFFER_TANGENT), 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
 }
 
 void RayTracer::build_texture_arrays_(const Scene &scene) {

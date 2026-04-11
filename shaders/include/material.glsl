@@ -87,7 +87,7 @@ ScatterResult scatter_diffuse(Ray ray_in, HitInfo hit, Material mat, inout uint 
     if (near_zero(dir)) dir = hit.normal;
 
     r.scattered_ray.origin = hit.position + hit.normal * EPSILON;
-    r.scattered_ray.direction = normalize(dir);
+    r.scattered_ray.direction = dir;
     return r;
 }
 
@@ -127,7 +127,7 @@ ScatterResult scatter_metal(Ray ray_in, HitInfo hit, Material mat, inout uint se
 
     r.scattered = true;
     r.scattered_ray.origin = hit.position + N * EPSILON;
-    r.scattered_ray.direction = normalize(L);
+    r.scattered_ray.direction = L;
     return r;
 }
 
@@ -158,7 +158,7 @@ ScatterResult scatter_dielectric(Ray ray_in, HitInfo hit, Material mat, inout ui
     }
 
     r.scattered_ray.origin = hit.position + dir * EPSILON;
-    r.scattered_ray.direction = normalize(dir);
+    r.scattered_ray.direction = dir;
     return r;
 }
 

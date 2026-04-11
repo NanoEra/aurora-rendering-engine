@@ -40,7 +40,8 @@ bool intersect_aabb(Ray ray, vec3 aabb_min, vec3 aabb_max, float t_max) {
 
 // Moller-Trumbore triangle intersection using compact triangle (precomputed edges)
 // Uses TriangleCompactGpu: v0_material, e1=v1-v0, e2=v2-v0
-bool intersect_triangle_compact(Ray ray, TriangleCompactGpu tri, inout HitInfo hit) {
+// Returns true if hit, outputs barycentric coords (u, v) and distance t
+bool intersect_triangle_compact(Ray ray, TriangleCompactGpu tri, float t_max, out float out_t, out float out_u, out float out_v) {
     vec3 v0 = tri.v0_material.xyz;
     vec3 e1 = tri.e1.xyz;
     vec3 e2 = tri.e2.xyz;
@@ -60,18 +61,37 @@ bool intersect_triangle_compact(Ray ray, TriangleCompactGpu tri, inout HitInfo h
     if (v < 0.0 || u + v > 1.0) return false;
 
     float t = dot(e2, qvec) * inv_det;
-    if (t < EPSILON || t >= hit.t) return false;
+    if (t < EPSILON || t >= t_max) return false;
 
-    float w = 1.0 - u - v;
+    out_t = t;
+    out_u = u;
+    out_v = v;
+    return true;
+}
 
-    // Fetch attributes only after confirmed hit
-    TriangleAttrGpu attr = bvh_attrs[gl_GlobalInvocationID.x];
-    // We need the triangle index, not invocation ID. Use a different approach.
+// Check if triangle is hit (for shadow rays - no barycentric needed)
+bool intersect_triangle_any(Ray ray, TriangleCompactGpu tri, float t_max) {
+    vec3 v0 = tri.v0_material.xyz;
+    vec3 e1 = tri.e1.xyz;
+    vec3 e2 = tri.e2.xyz;
 
-    hit.hit = true;
-    hit.t = t;
-    hit.position = ray.origin + t * ray.direction;
-    hit.material_id = as_uint(tri.v0_material.w);
+    vec3 pvec = cross(ray.direction, e2);
+    float det = dot(e1, pvec);
+
+    if (abs(det) < EPSILON) return false;
+    float inv_det = 1.0 / det;
+
+    vec3 tvec = ray.origin - v0;
+    float u = dot(tvec, pvec) * inv_det;
+    if (u < 0.0 || u > 1.0) return false;
+
+    vec3 qvec = cross(tvec, e1);
+    float v = dot(ray.direction, qvec) * inv_det;
+    if (v < 0.0 || u + v > 1.0) return false;
+
+    float t = dot(e2, qvec) * inv_det;
+    if (t < EPSILON || t >= t_max) return false;
+
     return true;
 }
 
@@ -131,35 +151,17 @@ HitInfo trace_ray_bvh(Ray ray) {
             for (uint i = 0u; i < count; ++i) {
                 uint tri_idx = left_first + i;
                 TriangleCompactGpu tri = bvh_tris[tri_idx];
-                vec3 v0 = tri.v0_material.xyz;
-                vec3 e1 = tri.e1.xyz;
-                vec3 e2 = tri.e2.xyz;
-
-                vec3 pvec = cross(ray.direction, e2);
-                float det = dot(e1, pvec);
-
-                if (abs(det) < EPSILON) continue;
-                float inv_det = 1.0 / det;
-
-                vec3 tvec = ray.origin - v0;
-                float u = dot(tvec, pvec) * inv_det;
-                if (u < 0.0 || u > 1.0) continue;
-
-                vec3 qvec = cross(tvec, e1);
-                float v = dot(ray.direction, qvec) * inv_det;
-                if (v < 0.0 || u + v > 1.0) continue;
-
-                float t = dot(e2, qvec) * inv_det;
-                if (t < EPSILON || t >= hit.t) continue;
-
-                // Record hit but defer attribute fetch
-                hit.hit = true;
-                hit.t = t;
-                hit.position = ray.origin + t * ray.direction;
-                hit.material_id = as_uint(tri.v0_material.w);
-                hit_tri_idx = tri_idx;
-                hit_u = u;
-                hit_v = v;
+                
+                float t, u, v;
+                if (intersect_triangle_compact(ray, tri, hit.t, t, u, v)) {
+                    hit.hit = true;
+                    hit.t = t;
+                    hit.position = ray.origin + t * ray.direction;
+                    hit.material_id = as_uint(tri.v0_material.w);
+                    hit_tri_idx = tri_idx;
+                    hit_u = u;
+                    hit_v = v;
+                }
             }
         } else {
             uint left = left_first;
@@ -239,28 +241,9 @@ bool trace_any_bvh(Ray ray, float t_max) {
         if (count > 0u) {
             for (uint i = 0u; i < count; ++i) {
                 TriangleCompactGpu tri = bvh_tris[left_first + i];
-                vec3 v0 = tri.v0_material.xyz;
-                vec3 e1 = tri.e1.xyz;
-                vec3 e2 = tri.e2.xyz;
-
-                vec3 pvec = cross(ray.direction, e2);
-                float det = dot(e1, pvec);
-
-                if (abs(det) < EPSILON) continue;
-                float inv_det = 1.0 / det;
-
-                vec3 tvec = ray.origin - v0;
-                float u = dot(tvec, pvec) * inv_det;
-                if (u < 0.0 || u > 1.0) continue;
-
-                vec3 qvec = cross(tvec, e1);
-                float v = dot(ray.direction, qvec) * inv_det;
-                if (v < 0.0 || u + v > 1.0) continue;
-
-                float t = dot(e2, qvec) * inv_det;
-                if (t < EPSILON || t >= t_max) continue;
-
-                return true;
+                if (intersect_triangle_any(ray, tri, t_max)) {
+                    return true;
+                }
             }
         } else {
             uint left = left_first;

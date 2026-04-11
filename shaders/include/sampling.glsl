@@ -3,7 +3,7 @@
 #ifndef SAMPLING_GLSL
 #define SAMPLING_GLSL
 
-// Cosine-weighted hemisphere sampling (avoids infinite loop)
+// Uniform sphere sampling
 vec3 random_in_unit_sphere(inout uint seed) {
     float z = 1.0 - 2.0 * random_float(seed);
     float r = sqrt(max(0.0, 1.0 - z * z));
@@ -13,6 +13,23 @@ vec3 random_in_unit_sphere(inout uint seed) {
 
 vec3 random_unit_vector(inout uint seed) {
     return normalize(random_in_unit_sphere(seed));
+}
+
+// Cosine-weighted hemisphere sampling for Lambertian BRDF
+// Matches pdf = cos(theta) / PI for faster convergence
+vec3 sample_cosine_weighted(vec3 N, inout uint seed) {
+    // Malley method: uniform disk -> hemisphere
+    float r = sqrt(random_float(seed));
+    float phi = 2.0 * PI * random_float(seed);
+    float x = r * cos(phi);
+    float y = r * sin(phi);
+    float z = sqrt(max(0.0, 1.0 - x * x - y * y));
+    
+    vec3 up = (abs(N.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 T = normalize(cross(up, N));
+    vec3 B = cross(N, T);
+    mat3 onb = mat3(T, B, N);
+    return onb * vec3(x, y, z);
 }
 
 // Build orthonormal basis from normal vector
@@ -32,7 +49,6 @@ vec3 sample_ggx_half_vector(float roughness, vec3 N, inout uint seed) {
     float u1 = random_float(seed);
     float u2 = random_float(seed);
 
-	// Clamp to avoid numerical issues at boundaries
 	u1 = clamp(u1, 0.001, 0.999);
 
     // Spherical coordinates from GGX distribution

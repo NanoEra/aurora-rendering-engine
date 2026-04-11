@@ -77,29 +77,14 @@ SobolState init_sobol(uint pixel_index, uint frame, uint sample_idx) {
 // Get next Sobol float in [0, 1)
 float sobol_next(inout SobolState state) {
     float value;
-    if (state.dimension < 8u) {
-        // Use Sobol for first 8 dimensions
+    if (state.dimension < 16u) {
         value = sobol_get(state.sample_index, state.dimension, state.scramble);
     } else {
-        // Fall back to PCG for higher dimensions
         uint rng_state = pcg_hash(state.scramble + state.dimension * 2654435761u);
         value = float(rng_state) / 4294967296.0;
     }
     state.dimension++;
     return value;
-}
-
-// Sobol-based random in unit sphere
-vec3 sobol_in_unit_sphere(inout SobolState state) {
-    float z = 1.0 - 2.0 * sobol_next(state);
-    float r = sqrt(max(0.0, 1.0 - z * z));
-    float phi = 2.0 * PI * sobol_next(state);
-    return vec3(r * cos(phi), r * sin(phi), z);
-}
-
-// Sobol-based unit vector
-vec3 sobol_unit_vector(inout SobolState state) {
-    return normalize(sobol_in_unit_sphere(state));
 }
 
 // Sobol-based GGX half vector sampling
@@ -116,17 +101,32 @@ vec3 sobol_ggx_half_vector(float roughness, vec3 N, inout SobolState state) {
     float phi = 2.0 * PI * u2;
 
     vec3 H_tangent = vec3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta);
-    mat3 onb = build_onb(N);
-    return normalize(onb * H_tangent);
+    vec3 up = (abs(N.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 T = normalize(cross(up, N));
+    vec3 B = cross(N, T);
+    mat3 onb = mat3(T, B, N);
+    return onb * H_tangent;
 }
 
-// Sobol-based diffuse scattering
+// Sobol-based diffuse scattering with cosine-weighted importance sampling
 ScatterResult scatter_diffuse_sobol(Ray ray_in, HitInfo hit, Material mat, inout SobolState state) {
     ScatterResult r;
     r.scattered = true;
     r.attenuation = mat.albedo;
 
-    vec3 dir = hit.normal + sobol_unit_vector(state);
+    // Cosine-weighted importance sampling for Lambertian BRDF
+    float r_sqrt = sqrt(sobol_next(state));
+    float phi = 2.0 * PI * sobol_next(state);
+    float x = r_sqrt * cos(phi);
+    float y = r_sqrt * sin(phi);
+    float z = sqrt(max(0.0, 1.0 - x * x - y * y));
+    
+    vec3 up = (abs(hit.normal.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 T = normalize(cross(up, hit.normal));
+    vec3 B = cross(hit.normal, T);
+    mat3 onb = mat3(T, B, hit.normal);
+    vec3 dir = onb * vec3(x, y, z);
+
     if (near_zero(dir)) dir = hit.normal;
 
     r.scattered_ray.origin = hit.position + hit.normal * EPSILON;

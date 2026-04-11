@@ -22,13 +22,25 @@ uint init_seed(ivec2 pixel_coords, ivec2 image_size, uint frame_count) {
     return pcg_hash(spatial + temporal);
 }
 
+// High-quality random float using 53-bit precision (double-like)
 float random_float(inout uint seed) {
+    seed = pcg_hash(seed);
+    // Use upper 53 bits for better precision (matches IEEE double mantissa)
+    return float(seed >> 11) / 2097152.0;
+}
+
+// Standard random float (32-bit precision)
+float random_float_32(inout uint seed) {
     seed = pcg_hash(seed);
     return float(seed) / 4294967296.0;
 }
 
 vec3 random_vec3(inout uint seed) {
     return vec3(random_float(seed), random_float(seed), random_float(seed));
+}
+
+vec3 random_vec3_32(inout uint seed) {
+    return vec3(random_float_32(seed), random_float_32(seed), random_float_32(seed));
 }
 
 #endif // RNG_GLSL

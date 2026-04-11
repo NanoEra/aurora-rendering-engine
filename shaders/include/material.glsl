@@ -83,7 +83,8 @@ ScatterResult scatter_diffuse(Ray ray_in, HitInfo hit, Material mat, inout uint 
     r.scattered = true;
     r.attenuation = mat.albedo;
 
-    vec3 dir = hit.normal + random_unit_vector(seed);
+    // Use cosine-weighted importance sampling for Lambertian BRDF
+    vec3 dir = sample_cosine_weighted(hit.normal, seed);
     if (near_zero(dir)) dir = hit.normal;
 
     r.scattered_ray.origin = hit.position + hit.normal * EPSILON;

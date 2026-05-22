@@ -1,0 +1,22 @@
+#version 430 core
+
+#include "../include/tonemap.glsl"
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+// Binding 1 – full-res accumulation buffer (RGB = colour, A = 1.0 once sampled)
+layout(binding = 1, rgba32f) uniform readonly image2D u_accumulated_rt;
+
+// Binding 2 – final output
+layout(binding = 2, rgba32f) uniform writeonly image2D u_output;
+
+// ── Upscale: tonemap accumulated RT or output black for unreached pixels ──
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 s = imageSize(u_output);
+    if (p.x >= s.x || p.y >= s.y) return;
+
+    vec4 acc = imageLoad(u_accumulated_rt, p);
+    vec3 col = (acc.a > 0.0) ? aces_tonemap(acc.rgb) : vec3(0.0);
+    imageStore(u_output, p, vec4(col, 1.0));
+}

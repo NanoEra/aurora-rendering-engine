@@ -1,9 +1,9 @@
 #ifndef ARE_INCLUDE_UTILS_CONFIG_H
 #define ARE_INCLUDE_UTILS_CONFIG_H
 
+#include "basic/types.h"
 #include <string>
 #include <unordered_map>
-#include "basic/types.h"
 
 namespace are {
 
@@ -17,6 +17,12 @@ struct RayTracerConfig {
 	bool use_bvh = true;
 };
 
+// Super resolution configuration
+struct SuperResolutionConfig {
+	bool enabled = false; // Enable the super resolution mode
+	uint scaling = 4; // Pixel ratio: how many times fewer pixels rendered per frame
+					  // scaling=4 → 1/4 pixels, 2×2 blocks, 4 jitter positions
+};
 
 // Configuration struct for renderer
 struct RendererConfig {
@@ -24,8 +30,7 @@ struct RendererConfig {
 	uint output_height;
 	RayTracerConfig rt_config;
 	bool enable_denoising;
-	bool enable_sr; // Enable the super resolution mode
-	double sr_scaling; // The magnification of super-resolution
+	SuperResolutionConfig sr_config;
 };
 
 } // namespace are

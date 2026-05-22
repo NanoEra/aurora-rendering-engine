@@ -306,7 +306,7 @@ void setup_cornell_box() {
 	g_scene->add_mesh(tall_box);
 
 	// Short box (metal, right side)
-	auto short_box = create_box(Vec3(0.2f, -room_size, 0.2f), Vec3(0.9f, -0.4f, 0.9f), glass_id);
+	auto short_box = create_box(Vec3(0.2f, -room_size, 0.2f), Vec3(0.9f, -0.4f, 0.9f), emissive_sphere_id);
 	short_box->upload_to_gpu();
 	g_scene->add_mesh(short_box);
 
@@ -553,6 +553,9 @@ int main() {
 	config.rt_config.max_depth = 4;
 	config.rt_config.enable_accumulation = true;
 	config.enable_denoising = false;
+
+	config.sr_config.enabled = true;
+	config.sr_config.scaling = 4;
 
 	g_renderer = std::make_unique<Renderer>(config);
 	if (!g_renderer->initialize()) {

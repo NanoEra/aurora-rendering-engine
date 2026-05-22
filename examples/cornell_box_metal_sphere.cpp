@@ -536,6 +536,10 @@ int main() {
 	config.rt_config.enable_accumulation = true;
 	config.enable_denoising = false;
 
+
+	config.sr_config.enabled = true;
+	config.sr_config.scaling = 4.0;
+
 	g_renderer = std::make_unique<Renderer>(config);
 	if (!g_renderer->initialize()) {
 		ARE_LOG_ERROR("Failed to initialize renderer");

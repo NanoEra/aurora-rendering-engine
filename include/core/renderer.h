@@ -7,6 +7,7 @@
 #include "core/raytracer.h"
 #include "core/screen_blit.h"
 #include "core/shader_manager.h"
+#include "core/super_resolution.h"
 #include "scene/scene.h"
 #include "utils/config.h"
 #include <memory>
@@ -73,11 +74,11 @@ private:
 	std::unique_ptr<ShaderManager> shader_manager_;
 	std::unique_ptr<ScreenBlit> screen_blit_;
 	std::unique_ptr<Denoiser> denoiser_;
+	std::unique_ptr<SuperResolution> super_resolution_;
 
 	TextureHandle rt_output_texture_;
 
 	bool initialized_;
-	uint frame_count_;
 };
 
 } // namespace are

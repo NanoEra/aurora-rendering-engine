@@ -37,3 +37,7 @@ Makefile
 # OS files
 .DS_Store
 Thumbs.db
+
+# Some testing scripts for me qwq
+cornell_box_build.sh
+cornell_box_metal_sphere_build.sh

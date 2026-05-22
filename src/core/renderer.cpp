@@ -9,8 +9,7 @@ namespace are {
 Renderer::Renderer(const RendererConfig &config)
 	: config_(config)
 	, rt_output_texture_(INVALID_HANDLE)
-	, initialized_(false)
-	, frame_count_(0) {
+	, initialized_(false) {
 }
 
 Renderer::~Renderer() {
@@ -40,10 +39,7 @@ bool Renderer::initialize() {
 	}
 
 	// Initialize ray tracer
-	RayTracerConfig rt_config = config_.rt_config;
-
-	// Initialize ray tracer
-	raytracer_ = std::make_unique<RayTracer>(config_.output_width, config_.output_height, rt_config);
+	raytracer_ = std::make_unique<RayTracer>(config_.output_width, config_.output_height, config_.rt_config);
 	const auto &rt_shader = shader_manager_->get_raytracing_shader();
 	if (!raytracer_->initialize(rt_shader)) {
 		ARE_LOG_ERROR("Failed to initialize ray tracer");
@@ -63,6 +59,16 @@ bool Renderer::initialize() {
 	if (!denoiser_->initialize(denoise_shader)) {
 		ARE_LOG_ERROR("Failed to initialize denoiser");
 		return false;
+	}
+
+	// Initialize super resolution if enabled
+	if (config_.sr_config.enabled) {
+		super_resolution_ = std::make_unique<SuperResolution>(config_.output_width, config_.output_height, config_.sr_config);
+		const auto &sr_shader = shader_manager_->get_super_resolution_shader();
+		if (!super_resolution_->initialize(sr_shader)) {
+			ARE_LOG_ERROR("Failed to initialize super resolution");
+			return false;
+		}
 	}
 
 	// Create ray tracing output texture (reused every frame)
@@ -92,6 +98,7 @@ void Renderer::shutdown() {
 	gbuffer_.reset();
 	shader_manager_.reset();
 	denoiser_.reset();
+	super_resolution_.reset();
 
 	initialized_ = false;
 	ARE_LOG_INFO("Aurora Rendering Engine shut down");
@@ -124,21 +131,36 @@ RenderStats Renderer::render(const Scene &scene, TextureHandle output_texture) {
 	// Phase 2: Ray tracing pass
 	auto raytrace_start = std::chrono::high_resolution_clock::now();
 
-	// Use output texture if provided, otherwise use internal texture
-	TextureHandle rt_output = (output_texture != 0) ? output_texture : rt_output_texture_;
+	TextureHandle rt_output;
+	if (config_.sr_config.enabled && super_resolution_) {
+		auto &sr = *super_resolution_;
+		uint jitt = sr.get_current_jitter_frame();
+		rt_output = sr.get_low_res_rt_texture();
 
-	raytracer_->trace(scene, *gbuffer_, rt_output);
+		raytracer_->trace(scene, *gbuffer_, rt_output,
+			config_.sr_config.scaling, jitt,
+			sr.get_accumulated_rt_texture());
+	} else {
+		rt_output = (output_texture != 0) ? output_texture : rt_output_texture_;
+		raytracer_->trace(scene, *gbuffer_, rt_output);
+	}
 
 	auto raytrace_end = std::chrono::high_resolution_clock::now();
 	stats.raytrace_time_ms_ = std::chrono::duration<float, std::milli>(raytrace_end - raytrace_start).count();
 
-	// Phase 3: Denoise texture
-	TextureHandle final_output = rt_output;
-
-	if (config_.enable_denoising && denoiser_) {
-		// Use temporal accumulation with weight 0.1 (10% blend of new frame)
-		float temporal_weight = 0.1f;
-		final_output = denoiser_->denoise(rt_output, 1, temporal_weight);
+	// Phase 3: Post-processing and output
+	TextureHandle final_output;
+	if (config_.sr_config.enabled && super_resolution_) {
+		// Denoising intentionally skipped — cross‑cycle accumulation provides temporal smoothing
+		auto &sr = *super_resolution_;
+		final_output = sr.upscale();
+		sr.advance_jitter_frame();
+	} else {
+		final_output = rt_output;
+		if (config_.enable_denoising && denoiser_) {
+			float temporal_weight = 0.1f;
+			final_output = denoiser_->denoise(final_output, 1, temporal_weight);
+		}
 	}
 
 	// Phase 4: Blit to screen if output is default framebuffer
@@ -155,11 +177,6 @@ RenderStats Renderer::render(const Scene &scene, TextureHandle output_texture) {
 	for (const auto &mesh : meshes) {
 		stats.triangle_count_ += mesh->get_indices().size() / 3;
 	}
-
-	// Estimate ray count (very rough)
-	stats.ray_count_ = config_.output_width * config_.output_height * config_.rt_config.samples_per_pixel * config_.rt_config.max_depth;
-
-	frame_count_++;
 
 	return stats;
 }
@@ -184,6 +201,10 @@ void Renderer::resize(uint width, uint height) {
 		raytracer_->resize(width, height);
 		denoiser_->resize(width, height);
 
+		if (super_resolution_) {
+			super_resolution_->resize(width, height);
+		}
+
 		ARE_LOG_INFO("Renderer resized to " + std::to_string(width) + "x" + std::to_string(height));
 	}
 }
@@ -200,6 +221,15 @@ void Renderer::set_config(const RendererConfig &config) {
 
 		// Update ray tracer config
 		raytracer_->set_config(config_.rt_config);
+
+		// Handle SR enable/disable
+		if (config_.sr_config.enabled && !super_resolution_) {
+			super_resolution_ = std::make_unique<SuperResolution>(config_.output_width, config_.output_height, config_.sr_config);
+			const auto &sr_shader = shader_manager_->get_super_resolution_shader();
+			super_resolution_->initialize(sr_shader);
+		} else if (!config_.sr_config.enabled && super_resolution_) {
+			super_resolution_.reset();
+		}
 	}
 }
 
@@ -210,6 +240,11 @@ void Renderer::notify_scene_changed(const Scene &scene) {
 	// Reset denoiser temporal history on scene change
 	if (denoiser_) {
 		denoiser_->reset_history();
+	}
+
+	// Reset super resolution accumulation on scene change
+	if (super_resolution_) {
+		super_resolution_->reset_accumulation();
 	}
 }
 

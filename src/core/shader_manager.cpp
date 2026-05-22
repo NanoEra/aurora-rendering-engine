@@ -39,6 +39,7 @@ void ShaderManager::release() {
 	screen_blit_shader_.reset();
 	raytracing_shader_.reset();
 	denoise_shader_.reset();
+	super_resolution_shader_.reset();
 
 	initialized_ = false;
 	ARE_LOG_INFO("ShaderManager released");
@@ -94,7 +95,7 @@ std::shared_ptr<Shader> ShaderManager::get_shader(const std::string &name) const
 
 bool ShaderManager::load_builtin_shaders_() {
 	// Load G-buffer shader
-	ARE_LOG_INFO("Loading G-buffer shaders..");
+	ARE_LOG_INFO("Loading G-buffer shaders...");
 	gbuffer_shader_ = std::make_shared<Shader>();
 	if (!gbuffer_shader_->load("shaders/gbuffer/gbuffer.vert", "shaders/gbuffer/gbuffer.frag")) {
 		ARE_LOG_ERROR("Failed to load G-Buffer shader");
@@ -131,6 +132,16 @@ bool ShaderManager::load_builtin_shaders_() {
 	}
 	shader_cache_["denoise"] = denoise_shader_;
 	ARE_LOG_INFO("Denoise shader loaded successfully");
+
+	// Load super resolution shader
+	ARE_LOG_INFO("Loading super resolution compute shader...");
+	super_resolution_shader_ = std::make_shared<Shader>();
+	if (!super_resolution_shader_->load_compute("shaders/postprocess/super_resolution.comp")) {
+		ARE_LOG_ERROR("Failed to load super resolution shader");
+		return false;
+	}
+	shader_cache_["super_resolution"] = super_resolution_shader_;
+	ARE_LOG_INFO("Super resolution shader loaded successfully");
 
 	return true;
 }

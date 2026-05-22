@@ -86,12 +86,21 @@ public:
 		return screen_blit_shader_;
 	}
 
+	/*
+	 * @brief Get super resolution shader
+	 * @return Super resolution shader (nullptr if not loaded)
+	 */
+	const std::shared_ptr<Shader> &get_super_resolution_shader() const {
+		return super_resolution_shader_;
+	}
+
 private:
 	std::unordered_map<std::string, std::shared_ptr<Shader>> shader_cache_;
 	std::shared_ptr<Shader> gbuffer_shader_;
 	std::shared_ptr<Shader> raytracing_shader_;
 	std::shared_ptr<Shader> denoise_shader_;
 	std::shared_ptr<Shader> screen_blit_shader_;
+	std::shared_ptr<Shader> super_resolution_shader_;
 
 	bool initialized_;
 

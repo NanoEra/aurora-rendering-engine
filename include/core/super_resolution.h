@@ -115,9 +115,9 @@ private:
 	SuperResolutionConfig config_;
 	uint current_jitter_frame_;
 
-	TextureHandle low_res_rt_texture_;      // W/block × H/block – per-frame RT output
-	TextureHandle accumulated_rt_texture_;  // W × H – running average (binding 4)
-	TextureHandle upscaled_texture_;        // W × H – final tonemapped output
+	TextureHandle low_res_rt_texture_; // W/block × H/block – per-frame RT output
+	TextureHandle accumulated_rt_texture_; // W × H – running average (binding 4)
+	TextureHandle upscaled_texture_; // W × H – final tonemapped output
 
 	std::shared_ptr<Shader> compute_shader_;
 	bool initialized_ = false;

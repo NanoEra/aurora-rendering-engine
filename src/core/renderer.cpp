@@ -1,6 +1,7 @@
 #include "core/renderer.h"
 #include "resource/resource_manager.h"
 #include "utils/logger.h"
+#include <algorithm>
 #include <chrono>
 #include <glad/glad.h>
 
@@ -23,6 +24,27 @@ bool Renderer::initialize() {
 	}
 
 	ARE_LOG_INFO("Initializing Aurora Rendering Engine...");
+
+	// The parameter check for super resolution module
+	if (config_.sr_config.enabled) {
+		// Parameters checking
+		if (config_.sr_config.scaling <= 1) {
+			ARE_LOG_WARN("Super resolution disabled: scaling must be > 1 (got " + std::to_string(config_.sr_config.scaling) + ")");
+			config_.sr_config.enabled = false;
+			config_.sr_config.scaling = 1;
+		}
+
+		// The super resolution module does not support nouveau driver
+		std::string vendor = std::string(reinterpret_cast<const char *>(glGetString(GL_VENDOR)));
+		std::transform(vendor.begin(), vendor.end(), vendor.begin(), ::tolower);
+		std::string renderer = std::string(reinterpret_cast<const char *>(glGetString(GL_RENDERER)));
+		std::transform(renderer.begin(), renderer.end(), renderer.begin(), ::tolower);
+		if (vendor.find("mesa") != std::string::npos && renderer.find("nv") != std::string::npos) {
+			ARE_LOG_WARN("Super resolution disabled: The super resolution module on nouveau may produce artifacts. Please switch to the NVIDIA proprietary driver if possible.");
+			config_.sr_config.enabled = false;
+			config_.sr_config.scaling = 1;
+		}
+	}
 
 	// Initialize shader manager
 	shader_manager_ = std::make_unique<ShaderManager>();

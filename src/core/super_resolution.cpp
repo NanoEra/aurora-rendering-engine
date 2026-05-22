@@ -4,6 +4,7 @@
 #include "utils/logger.h"
 #include <cmath>
 #include <glad/glad.h>
+#include <string>
 
 namespace are {
 
@@ -24,43 +25,51 @@ SuperResolution::~SuperResolution() {
 
 bool SuperResolution::initialize(const std::shared_ptr<Shader> &shader) {
 	if (initialized_) {
-		ARE_LOG_WARN("SuperResolution already initialized");
+		ARE_LOG_WARN("Super resolution already initialized");
 		return true;
 	}
+
 	if (!shader || !shader->is_valid()) {
 		ARE_LOG_ERROR("Invalid shader");
 		return false;
 	}
+
 	compute_shader_ = shader;
 	create_textures_();
 	initialized_ = true;
-	ARE_LOG_INFO("SuperResolution initialized: " + std::to_string(full_width_) + "x" + std::to_string(full_height_) + " scaling_px=" + std::to_string(config_.scaling) + " lowres=" + std::to_string(low_res_w_) + "x" + std::to_string(low_res_h_));
+	ARE_LOG_INFO("Super resolution initialized: " + std::to_string(full_width_) + "x" + std::to_string(full_height_) + " scaling_px=" + std::to_string(config_.scaling) + " lowres=" + std::to_string(low_res_w_) + "x" + std::to_string(low_res_h_));
 	return true;
 }
 
 void SuperResolution::release() {
-	if (!initialized_)
+	if (!initialized_) {
 		return;
+	}
 	ResourceManager &rm = ResourceManager::instance();
+
 	if (low_res_rt_texture_ != INVALID_HANDLE) {
 		rm.destroy_texture(low_res_rt_texture_);
 		low_res_rt_texture_ = INVALID_HANDLE;
 	}
+
 	if (accumulated_rt_texture_ != INVALID_HANDLE) {
 		rm.destroy_texture(accumulated_rt_texture_);
 		accumulated_rt_texture_ = INVALID_HANDLE;
 	}
+
 	if (upscaled_texture_ != INVALID_HANDLE) {
 		rm.destroy_texture(upscaled_texture_);
 		upscaled_texture_ = INVALID_HANDLE;
 	}
+
 	initialized_ = false;
 	ARE_LOG_INFO("SuperResolution released");
 }
 
 TextureHandle SuperResolution::upscale() {
-	if (!initialized_ || !compute_shader_)
+	if (!initialized_ || !compute_shader_) {
 		return INVALID_HANDLE;
+	}
 
 	compute_shader_->use();
 	glBindImageTexture(1, accumulated_rt_texture_, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
@@ -84,26 +93,31 @@ void SuperResolution::reset_accumulation() {
 }
 
 void SuperResolution::resize(uint full_width, uint full_height) {
-	if (full_width == full_width_ && full_height == full_height_)
+	if (full_width == full_width_ && full_height == full_height_) {
 		return;
+	}
 	full_width_ = full_width;
 	full_height_ = full_height;
 	uint block = compute_block_size_();
 	low_res_w_ = full_width_ / block;
 	low_res_h_ = full_height_ / block;
-	if (!initialized_)
+	if (!initialized_) {
 		return;
+	}
 
 	ResourceManager &rm = ResourceManager::instance();
 	if (low_res_rt_texture_ != INVALID_HANDLE) {
 		rm.destroy_texture(low_res_rt_texture_);
 	}
+
 	if (accumulated_rt_texture_ != INVALID_HANDLE) {
 		rm.destroy_texture(accumulated_rt_texture_);
 	}
+
 	if (upscaled_texture_ != INVALID_HANDLE) {
 		rm.destroy_texture(upscaled_texture_);
 	}
+
 	create_textures_();
 	ARE_LOG_INFO("SuperResolution resized to " + std::to_string(full_width) + "x" + std::to_string(full_height));
 }
@@ -122,8 +136,7 @@ void SuperResolution::clear_accumulation_texture_() const {
 	GLuint fbo;
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-		accumulated_rt_texture_, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, accumulated_rt_texture_, 0);
 	const GLfloat clear_color[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	glClearBufferfv(GL_COLOR, 0, clear_color);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
